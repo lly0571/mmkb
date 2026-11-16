@@ -14,6 +14,12 @@
 
 详细字段和迁移约定见 [Schema 说明](docs/schema.md)，模型定义见 [models.py](mmkb/db/models.py)。
 
+## 检索服务
+
+`mmkb.retrieval.search()` 已支持文本、图片字节与图文联合查询、标签 AND 过滤、cosine Top-K 排序及结果摘要。编码器由调用方注入，默认 Top-K 为 20；共享的 `segment_text()` 提供 Jieba 精确分词。调用示例、编码协议、异常约定及隔离数据库测试命令见 [检索服务说明](docs/retrieval.md)。
+
+当前检索未接入 HTTP 搜索接口、真实模型客户端桥接或关键词辅助。数据库结构沿用现有迁移，测试使用事务内的精确扫描。
+
 ## 开发环境
 
 需要 Python 3.11 及以上版本，以及已经创建的 PostgreSQL 数据库。目标数据库须预先在 `public` schema 中启用 pgvector 扩展。
