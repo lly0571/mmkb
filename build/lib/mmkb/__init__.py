@@ -1,1 +1,0 @@
-"""MMKB application package."""
