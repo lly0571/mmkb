@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmkb"
+version = "0.1.0"
+description = "Multimodal knowledge base schema and implementation foundations"
+requires-python = ">=3.11"
+dependencies = [
+  "SQLAlchemy>=2.0.39,<2.1",
+  "alembic>=1.16,<2",
+  "pgvector>=0.4,<0.5",
+  "psycopg2-binary>=2.9,<3",
+  "python-dotenv>=1,<2",
+]
+
+[tool.setuptools.packages.find]
+include = ["mmkb*"]
