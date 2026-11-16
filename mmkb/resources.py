@@ -3,20 +3,17 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import logging
-from pathlib import PurePosixPath
 from typing import BinaryIO
 from uuid import UUID, uuid4
-import warnings
 
-from PIL import Image, UnidentifiedImageError
 import sqlalchemy as sa
 
 from mmkb.config import AppConfig, load_app_config
 from mmkb.db.models import Resource, ResourceIndex, StorageProfile
 from mmkb.db.session import create_session_factory
 from mmkb.errors import ResourceError, StorageError
+from mmkb.images import inspect_image
 from mmkb.storage import StorageResolver, validate_key
 
 logger = logging.getLogger(__name__)
@@ -75,40 +72,7 @@ class ResourceService:
             raise ResourceError("invalid_title", "Title cannot be null")
 
     def _inspect_image(self, source: BinaryIO, filename: str | None):
-        source.seek(0)
-        digest = hashlib.sha256()
-        size = 0
-        while chunk := source.read(64 * 1024):
-            size += len(chunk)
-            if size > self.config.max_upload_bytes:
-                raise ResourceError("file_too_large", "Image exceeds MAX_UPLOAD_BYTES", 413)
-            digest.update(chunk)
-        if size == 0:
-            raise ResourceError("empty_file", "Image file is empty")
-        source.seek(0)
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", Image.DecompressionBombWarning)
-                with Image.open(source) as image:
-                    fmt = image.format
-                    if fmt not in {"PNG", "JPEG", "WEBP"}:
-                        raise ResourceError("unsupported_format", "Only PNG, JPEG and WebP are supported", 415)
-                    width, height = image.size
-                    image.verify()
-                source.seek(0)
-                with Image.open(source) as image:
-                    image.load()
-        except UnidentifiedImageError:
-            raise ResourceError("unsupported_format", "File is not a supported image", 415) from None
-        except (OSError, SyntaxError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
-            raise ResourceError("invalid_image", "Image is corrupt or exceeds safe image dimensions") from None
-        finally:
-            source.seek(0)
-        extension, mime = {"PNG": ("png", "image/png"), "JPEG": ("jpg", "image/jpeg"), "WEBP": ("webp", "image/webp")}[fmt]
-        extra = dict(size_bytes=size, mime_type=mime, width=width, height=height)
-        if filename:
-            extra["original_filename"] = PurePosixPath(filename.replace("\\", "/")).name
-        return digest.hexdigest(), extension, extra
+        return inspect_image(source, filename, max_upload_bytes=self.config.max_upload_bytes)
 
     @staticmethod
     def _get(session, resource_id: UUID, lock=False):

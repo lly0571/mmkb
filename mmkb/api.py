@@ -16,6 +16,7 @@ from mmkb.config import AppConfig, load_app_config
 from mmkb.db.session import create_session_factory
 from mmkb.errors import ResourceError
 from mmkb.resources import ResourceService
+from mmkb.search import SearchService
 from mmkb.storage import StorageResolver
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,22 @@ class ResourcePatch(RevisionRequest):
     workflow: Workflow | None = None
 
 
+class SearchItemResponse(BaseModel):
+    resource_id: UUID
+    input_kind: InputKind
+    title: str
+    tags: list[str]
+    summary: str
+    score: float
+    detail_url: str
+    original_url: str | None
+
+
+class SearchResponse(BaseModel):
+    mode: Literal["vector"]
+    items: list[SearchItemResponse]
+
+
 class OriginalResponse(StreamingResponse):
     """Always close the object, including disconnects and streaming failures."""
     def __init__(self, stream, media_type):
@@ -82,12 +99,14 @@ class OriginalResponse(StreamingResponse):
             self.stream.close()
 
 
-def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=None) -> FastAPI:
+def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=None, search_service=None) -> FastAPI:
     config = config or load_app_config()
     owned_sessions = sessions is None
     owned_resolver = storage_resolver is None
     sessions = sessions if sessions is not None else create_session_factory(config.database_url)
     resolver = storage_resolver if storage_resolver is not None else StorageResolver(config)
+    owned_search = search_service is None
+    search_service = search_service if search_service is not None else SearchService(sessions, config)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -95,8 +114,12 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
             yield
         finally:
             try:
-                if owned_resolver:
-                    resolver.close()
+                try:
+                    if owned_search:
+                        search_service.close()
+                finally:
+                    if owned_resolver:
+                        resolver.close()
             finally:
                 if owned_sessions:
                     sessions.kw["bind"].dispose()
@@ -104,6 +127,7 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
     app = FastAPI(title="MMKB Resource API", version="0.1.0", lifespan=lifespan)
     service = ResourceService(sessions, config, resolver)
     app.state.resources = service
+    app.state.search = search_service
 
     @app.exception_handler(ResourceError)
     async def resource_error(request: Request, exc: ResourceError):
@@ -139,6 +163,20 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
         try:
             return service.create(source=file.file if file else None, filename=file.filename if file else None,
                                   title=title, tags=tags, user_text=user_text, workflow=workflow)
+        finally:
+            if file:
+                file.file.close()
+
+    @app.post("/api/search", response_model=SearchResponse)
+    def search_resources(
+        file: Annotated[UploadFile | None, File()] = None,
+        text: Annotated[str | None, Form()] = None,
+        tags: Annotated[list[str] | None, Form()] = None,
+        top_k: Annotated[int, Form(ge=1, le=100)] = 20,
+    ):
+        try:
+            return search_service.search(text=text, source=file.file if file else None,
+                                         filename=file.filename if file else None, tags=tags, top_k=top_k)
         finally:
             if file:
                 file.file.close()

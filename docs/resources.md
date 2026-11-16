@@ -2,7 +2,7 @@
 
 已实现三类资料导入、分页查询、详情、编辑、失败重试、原件代理读取及删除清理。HTTP 层使用 FastAPI，业务层直接使用 SQLAlchemy ORM。结构沿用现有三张表，无新增迁移。
 
-本模块只将资料置为 `pending`，不调用编码或检索服务。处理 Worker 尚未接入，因此导入后保持 `pending` 是预期行为。当前不提供 Web、缩略图、替换原图或删除恢复。
+本模块只将资料置为 `pending`，不调用编码或检索服务。独立运行的 [处理 Worker](processing.md) 负责推进到 `ready` 或 `failed`；未启动 Worker 时资料保持 `pending`。当前不提供 Web、缩略图、替换原图或删除恢复。
 
 ## 配置与启动
 
@@ -72,7 +72,7 @@ curl -X PATCH http://127.0.0.1:8000/api/resources/RESOURCE_ID \
 
 纯文本路线固定为 `text`，图片与配文固定为 `text_image`。仅图片可选 `structured_image/visual_image/visdoc`，默认留空，等待处理模块判断。添加或删除图片配文会自动更新输入形式和路线；不兼容的显式 workflow 报错。
 
-编辑会递增 revision、删除旧索引、清除处理错误并回到 `pending`；处理中也可编辑。Caption/OCR 未提交时保留；字符串表示修正值（包括空字符串），显式 `null` 表示清空。未来处理模块必须保留非 null 值，并校验 revision、状态和删除标记后提交结果。
+编辑会递增 revision、删除旧索引、清除处理错误并回到 `pending`；处理中也可编辑。Caption/OCR 未提交时保留；字符串表示修正值（包括空字符串），显式 `null` 表示清空。Worker 保留非 null 值，仅在当前路线需要时为 null 字段生成内容，并校验 revision、状态和删除标记后提交结果。视觉分析警告位于 `extra.processing.warnings`，不影响成功资料进入 `ready`。
 
 版本冲突或不可重试状态返回 `409`；参数错误返回 `422`；内容超限 `413`；格式不支持 `415`；资料、原件不存在或已删除 `404`；数据库或存储不可用 `503`。错误包含 `code/message`，请求校验错误另含不带原始内容的字段信息。
 
@@ -84,7 +84,7 @@ curl -X PATCH http://127.0.0.1:8000/api/resources/RESOURCE_ID \
 python -m mmkb.resources cleanup-deleted --limit 100
 ```
 
-每批输出 `scanned/cleaned/failed`，有清理失败时退出码为 1。不存在的文件视为清理成功。本次不启动周期清理 Worker。
+每批输出 `scanned/cleaned/failed`，有清理失败时退出码为 1。不存在的文件视为清理成功。运行中的处理 Worker 每轮也会复用此清理能力，最多扫描 100 条。
 
 导入时先保存文件，再提交资源记录；数据库提交失败会补偿删除刚保存的文件。补偿再次失败会记录资源 ID 和错误类型，后续需要对账清理，本次不实现自动存储对账。
 

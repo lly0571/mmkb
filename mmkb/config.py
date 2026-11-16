@@ -124,6 +124,12 @@ def _load_embedding_config() -> ServiceConfig:
     return _load_service_config("EMBEDDING", default_timeout=60.0)
 
 
+def load_embedding_config() -> ServiceConfig:
+    """Load only query encoding settings, independently of optional vision."""
+    _load_environment()
+    return _load_embedding_config()
+
+
 def _load_service_config(prefix: str, *, default_timeout: float) -> ServiceConfig:
     values = {name: os.environ.get(f"{prefix}_{name}", "").strip() for name in ("BASE_URL", "MODEL")}
     missing = [f"{prefix}_{name}" for name, value in values.items() if not value]

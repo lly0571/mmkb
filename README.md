@@ -2,7 +2,7 @@
 
 多模态知识库的 Python 基础项目，使用 PostgreSQL、pgvector、SQLAlchemy ORM 和 Alembic 管理资料与检索数据。
 
-目前提供数据库模型、初始迁移、配置加载器、资源管理 HTTP API 和模型适配客户端。资源管理支持三类导入、编辑、重试、原件读取和删除；模型适配支持文本、图片、图文 Embedding，以及可选视觉服务的 Caption、OCR 和图片分类。
+目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、五条处理路线及 Local/S3 存储。模型适配支持文本、图片、图文 Embedding，以及可选视觉服务的 Caption、OCR 和图片分类。
 
 ## 数据结构
 
@@ -25,15 +25,35 @@ python -m mmkb.storage init
 uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-数据库须先完成下文的 Alembic 迁移。打开 `http://127.0.0.1:8000/docs` 可试用接口。存储初始化不会创建 Bucket 或覆盖已有 profile；API 启动不修改存储配置。资源管理不依赖模型配置，导入后进入 `pending`，等待后续处理 Worker。
+数据库须先完成下文的 Alembic 迁移。打开 `http://127.0.0.1:8000/docs` 可试用接口。存储初始化不会创建 Bucket 或覆盖已有 profile；API 启动不修改存储配置。资源管理不依赖模型配置，导入后进入 `pending`，由独立启动的 Worker 处理。
 
 接口、编辑规则、删除清理命令和集成测试见 [资源管理说明](docs/resources.md)。
+
+## 后台处理
+
+在另一个已激活 `mmkb` 环境的终端中，使用与 API 相同的数据库、存储和 Embedding 配置启动：
+
+```bash
+python -m mmkb.worker run
+```
+
+Worker 处理五条路线，成功后原子写入解析结果、2048 维索引和 `ready` 状态。已有非 null Caption/OCR 会被保留，视觉增强失败写入警告；必要处理失败进入 `failed`，可通过资源 API 重试。每个数据库只允许一个 Worker。
+
+```bash
+# 至多处理一份资料，并清理一批已删除资料
+python -m mmkb.worker run --once
+
+# 确认旧 Worker 已停止后，显式恢复异常退出遗留的 processing 资料
+python -m mmkb.worker recover-processing
+```
+
+恢复会递增 revision，客户端编辑前需要重新读取详情。启动不会自动恢复遗留任务。路线、事务边界、退出行为和测试见 [处理与 Worker 说明](docs/processing.md)。
 
 ## 检索服务
 
 `mmkb.retrieval.search()` 已支持文本、图片字节与图文联合查询、标签 AND 过滤、cosine Top-K 排序及结果摘要。编码器由调用方注入，默认 Top-K 为 20；共享的 `segment_text()` 提供 Jieba 精确分词。调用示例、编码协议、异常约定及隔离数据库测试命令见 [检索服务说明](docs/retrieval.md)。
 
-当前检索未接入 HTTP 搜索接口、真实模型客户端桥接或关键词辅助。数据库结构沿用现有迁移，测试使用事务内的精确扫描。
+`POST /api/search` 已接入真实模型客户端桥接，支持表单 `text/file/tags/top_k`，返回摘要、cosine 得分、详情及原件入口。图片仅在请求期间使用，不导入知识库。查询模型按需加载，模型不可用时明确报错；当前模式为纯向量检索，关键词辅助尚未实现。数据库结构沿用现有迁移，检索排序集成测试使用事务内的精确扫描。
 
 ## 文件存储
 
