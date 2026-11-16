@@ -1,7 +1,7 @@
 """Initial retrieval defaults; no database-backed configuration registry."""
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -43,6 +43,43 @@ def load_storage_config() -> StorageConfig:
         s3_addressing_style=os.environ.get("S3_ADDRESSING_STYLE", "path").strip(),
         s3_signature_version=os.environ.get("S3_SIGNATURE_VERSION", "s3v4").strip(),
     )
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    database_url: str = field(repr=False)
+    storage_backend: str = "local"
+    storage_profile_name: str = "local-default"
+    local_storage_root: str = "./data/assets"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str | None = None
+    s3_region: str = "us-east-1"
+    # Compatibility for existing resource callers; never applied by storage adapters.
+    s3_prefix: str = ""
+    s3_credential_profile: str | None = None
+    s3_addressing_style: str = "path"
+    s3_signature_version: str = "s3v4"
+    max_upload_bytes: int = 20 * 1024 * 1024
+    max_text_chars: int = 100_000
+
+
+def load_app_config() -> AppConfig:
+    storage = load_storage_config()
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url:
+        raise ValueError("Set DATABASE_URL in the environment or .env.local")
+    config = AppConfig(
+        database_url=database_url,
+        **asdict(storage),
+        s3_prefix=os.environ.get("S3_PREFIX", ""),
+        max_upload_bytes=int(os.environ.get("MAX_UPLOAD_BYTES", 20 * 1024 * 1024)),
+        max_text_chars=int(os.environ.get("MAX_TEXT_CHARS", 100_000)),
+    )
+    if config.storage_backend not in {"local", "s3"}:
+        raise ValueError("STORAGE_BACKEND must be local or s3")
+    if not config.storage_profile_name or min(config.max_upload_bytes, config.max_text_chars) < 1:
+        raise ValueError("Profile name and positive input limits are required")
+    return config
 
 
 @dataclass(frozen=True)

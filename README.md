@@ -2,7 +2,7 @@
 
 多模态知识库的 Python 基础项目，使用 PostgreSQL、pgvector、SQLAlchemy ORM 和 Alembic 管理资料与检索数据。
 
-目前提供数据库模型、初始迁移、配置加载器和模型适配客户端。模型适配支持文本、图片、图文 Embedding，以及可选视觉服务的 Caption、OCR 和图片分类。
+目前提供数据库模型、初始迁移、配置加载器、资源管理 HTTP API 和模型适配客户端。资源管理支持三类导入、编辑、重试、原件读取和删除；模型适配支持文本、图片、图文 Embedding，以及可选视觉服务的 Caption、OCR 和图片分类。
 
 ## 数据结构
 
@@ -13,6 +13,21 @@
 | `storage_profiles` | 本地目录或 S3 兼容存储的公共配置 |
 
 详细字段和迁移约定见 [Schema 说明](docs/schema.md)，模型定义见 [models.py](mmkb/db/models.py)。
+
+## 资源管理 API
+
+使用 FastAPI 提供 `/api/resources` 接口，支持 RustFS/S3 与 Local 存储。优先对接 RustFS 时，在 `.env.local` 配置 `STORAGE_BACKEND=s3`、`S3_ENDPOINT_URL`、`S3_BUCKET` 及服务端 AWS 凭证，然后执行：
+
+```bash
+conda activate mmkb
+python -m pip install -e '.[test]'
+python -m mmkb.storage init
+uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+数据库须先完成下文的 Alembic 迁移。打开 `http://127.0.0.1:8000/docs` 可试用接口。存储初始化不会创建 Bucket 或覆盖已有 profile；API 启动不修改存储配置。资源管理不依赖模型配置，导入后进入 `pending`，等待后续处理 Worker。
+
+接口、编辑规则、删除清理命令和集成测试见 [资源管理说明](docs/resources.md)。
 
 ## 检索服务
 

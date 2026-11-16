@@ -68,7 +68,7 @@ erDiagram
 - 显式索引包括向量 cosine HNSW、待处理资料和 SHA-256 的 B-tree；初始不建 GIN。
 - 三张表及全部 30 个字段使用 SQLAlchemy `comment=` 定义数据库注释，由 Alembic 写入。
 
-`revision`、更新时间和软删除过滤需要业务代码显式维护。JSONB/ARRAY 更新应整体赋值或显式标记变化，不能假定嵌套对象的原地修改会自动持久化。目前项目尚未实现这些业务接口。
+`revision`、更新时间和软删除过滤由资源服务显式维护，接口与状态规则见 [资源管理说明](resources.md)。JSONB/ARRAY 更新应整体赋值或显式标记变化，不能假定嵌套对象的原地修改会自动持久化。
 
 ## 结构管理
 

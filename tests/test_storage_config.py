@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 
-from mmkb.config import PROJECT_ROOT, StorageConfig, load_storage_config
+from mmkb.config import PROJECT_ROOT, StorageConfig, load_app_config, load_storage_config
 from mmkb.db.models import StorageProfile
 from mmkb.errors import ResourceError, StorageConfigError, StorageError
 from mmkb.storage import LocalStorage, S3Storage, StorageResolver, initialize_profile, main
@@ -49,11 +49,14 @@ def test_storage_config_independent_of_models_and_database(storage_environment):
     storage_environment.assert_called_once_with(PROJECT_ROOT / ".env.local", override=False)
 
 
-def test_backend_defaults_and_profile_selection(storage_environment, monkeypatch):
+def test_backend_defaults_and_app_configuration_share_profile(storage_environment, monkeypatch):
     monkeypatch.setenv("STORAGE_BACKEND", "s3")
     assert load_storage_config().storage_profile_name == "s3-default"
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unused")
+    assert load_app_config().storage_profile_name == "s3-default"
     monkeypatch.setenv("STORAGE_PROFILE_NAME", "existing-profile")
-    assert load_storage_config().storage_profile_name == "existing-profile"
+    assert load_app_config().storage_profile_name == "existing-profile"
+    assert load_app_config().s3_prefix == ""
 
 
 def test_storage_environment_takes_precedence_over_dotenv(storage_environment, monkeypatch, tmp_path):
