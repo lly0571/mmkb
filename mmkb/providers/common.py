@@ -13,6 +13,7 @@ ImageKind = Literal["structured_image", "visual_image", "visdoc"]
 ErrorCode = Literal[
     "invalid_input", "input_too_large", "timeout", "connection_error",
     "http_error", "invalid_response", "output_truncated", "model_not_found",
+    "unsupported_model",
 ]
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,18 @@ class ImageInput:
     mime_type: str
 
 
-def image_content(image: ImageInput, capability: str) -> dict:
+def image_data_url(image: ImageInput, capability: str) -> str:
+    """Encode original image bytes as the data URL the services expect."""
     if not isinstance(image, ImageInput) or not isinstance(image.data, bytes) or not image.data:
         raise ProviderError(capability, "invalid_input", "Provide non-empty image bytes")
     if image.mime_type not in {"image/png", "image/jpeg", "image/webp"}:
         raise ProviderError(capability, "invalid_input", "Use PNG, JPEG or WebP images")
     encoded = base64.b64encode(image.data).decode("ascii")
-    return {"type": "image_url", "image_url": {"url": f"data:{image.mime_type};base64,{encoded}"}}
+    return f"data:{image.mime_type};base64,{encoded}"
+
+
+def image_content(image: ImageInput, capability: str) -> dict:
+    return {"type": "image_url", "image_url": {"url": image_data_url(image, capability)}}
 
 
 class ServiceClient:
@@ -66,7 +72,10 @@ class ServiceClient:
             if not response.is_success:
                 code: ErrorCode = "http_error"
                 message = "Model service rejected the request; check service availability and configuration"
-                if response.status_code in {400, 413, 422}:
+                if response.status_code == 501:
+                    code = "unsupported_model"
+                    message = "Served model does not support this capability; check the model and server options"
+                elif response.status_code in {400, 413, 422}:
                     code = "invalid_input"
                     message = "Model service rejected the input; check format and model input limits"
                     # Inspect only for categorization; never expose the remote error text.

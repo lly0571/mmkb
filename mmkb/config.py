@@ -112,6 +112,9 @@ class ServiceConfig:
 class ModelConfig:
     embedding: ServiceConfig
     caption: ServiceConfig | None = None
+    decision: ServiceConfig | None = None
+    # Request dialect of the decision service: auto, d3, clef or generic.
+    decision_profile: str = "auto"
 
 
 def _load_environment() -> None:
@@ -148,7 +151,12 @@ def load_model_config() -> ModelConfig:
     embedding = _load_embedding_config()
     has_caption = any(os.environ.get(f"CAPTION_{name}", "").strip() for name in ("BASE_URL", "MODEL"))
     caption = _load_service_config("CAPTION", default_timeout=120.0) if has_caption else None
-    return ModelConfig(embedding=embedding, caption=caption)
+    has_decision = any(os.environ.get(f"DECISION_{name}", "").strip() for name in ("BASE_URL", "MODEL"))
+    decision = _load_service_config("DECISION", default_timeout=60.0) if has_decision else None
+    decision_profile = os.environ.get("DECISION_MODEL_PROFILE", "").strip().lower() or "auto"
+    if decision_profile not in {"auto", "d3", "clef", "generic"}:
+        raise ValueError("DECISION_MODEL_PROFILE must be auto, d3, clef or generic")
+    return ModelConfig(embedding=embedding, caption=caption, decision=decision, decision_profile=decision_profile)
 
 
 def load_retrieval_config() -> RetrievalConfig:

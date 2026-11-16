@@ -2,7 +2,7 @@
 
 多模态知识库的 Python 基础项目，使用 PostgreSQL、pgvector、SQLAlchemy ORM 和 Alembic 管理资料与检索数据。
 
-目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、五条处理路线及 Local/S3 存储。模型适配支持文本、图片、图文 Embedding，以及可选视觉服务的 Caption、OCR 和图片分类。
+目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、五条处理路线及 Local/S3 存储。模型适配支持文本、图片、图文 Embedding，可选视觉服务的 Caption、OCR 和图片分类，以及可选结构化决策服务的 `/v1/systemone` 概率分类。
 
 ## 数据结构
 
@@ -85,9 +85,9 @@ python -m pip install -e .
 
 ## 模型适配
 
-Embedding 客户端面向支持 `messages` 多模态扩展的 vLLM Qwen3-VL Embedding 服务；图文使用一次原生联合编码。视觉客户端使用兼容 Chat Completions 的图像模型服务，发送 `chat_template_kwargs.enable_thinking=false` 关闭 Qwen 思考模式，三项能力共用 `CAPTION_BASE_URL` 与 `CAPTION_MODEL`。两个变量均为空时关闭视觉能力，仅填写其中一项会报配置错误。OCR 首版只提取全文，不提供坐标、版面结构或置信度。
+Embedding 客户端面向支持 `messages` 多模态扩展的 vLLM Qwen3-VL Embedding 服务；图文使用一次原生联合编码。视觉客户端使用兼容 Chat Completions 的图像模型服务，发送 `chat_template_kwargs.enable_thinking=false` 关闭 Qwen 思考模式，三项能力共用 `CAPTION_BASE_URL` 与 `CAPTION_MODEL`。两个变量均为空时关闭视觉能力，仅填写其中一项会报配置错误。OCR 首版只提取全文，不提供坐标、版面结构或置信度。决策客户端使用可选的 `DECISION_BASE_URL` 与 `DECISION_MODEL`，同样两项需同时填写。
 
-基址填写 API 根路径（通常以 `/v1` 结尾），客户端追加 `embeddings`、`chat/completions` 或 `models`。可选的 `EMBEDDING_API_KEY`、`CAPTION_API_KEY` 通过 Bearer 认证发送；为空时不发送认证头。`EMBEDDING_TIMEOUT_SECONDS` 默认 60，`CAPTION_TIMEOUT_SECONDS` 默认 120，表示网络读写与连接池等待超时；连接超时固定为 5 秒，不自动重试。
+基址填写 API 根路径（通常以 `/v1` 结尾），客户端追加 `embeddings`、`chat/completions`、`systemone` 或 `models`。可选的 `EMBEDDING_API_KEY`、`CAPTION_API_KEY`、`DECISION_API_KEY` 通过 Bearer 认证发送；为空时不发送认证头。`EMBEDDING_TIMEOUT_SECONDS` 默认 60，`CAPTION_TIMEOUT_SECONDS` 默认 120，`DECISION_TIMEOUT_SECONDS` 默认 60，表示网络读写与连接池等待超时；连接超时固定为 5 秒，不自动重试。
 
 ```python
 from pathlib import Path
@@ -107,7 +107,30 @@ with build_providers() as providers:
 
 `purpose` 必填，查询与资料共用预处理和模型；调整提示词或更换模型后需要重建已有向量。图片由调用方读取为字节，MIME 支持 `image/png`、`image/jpeg`、`image/webp`，适配器将原始字节编码为 data URL，解码和模型预处理由服务端完成。向量必须为 2048 维有限数值且非零，返回前完成 L2 归一化。输入超限或视觉输出截断会明确报错，不自动裁剪或分块。
 
-调用失败抛出 `ProviderError`，通过 `capability`、`code`、`status_code` 判断原因；错误信息不含原始请求或服务响应正文。常见错误码包括 `invalid_input`、`input_too_large`、`timeout`、`connection_error`、`http_error`、`invalid_response`、`output_truncated`、`model_not_found`。未配置视觉服务时 `providers.vision` 为 `None`；处理模块负责将可选能力失败转为警告或回退整图编码。`check_connection()` 仅检查服务模型列表，不代表推理或检索质量验收通过。
+调用失败抛出 `ProviderError`，通过 `capability`、`code`、`status_code` 判断原因；错误信息不含原始请求或服务响应正文。常见错误码包括 `invalid_input`、`input_too_large`、`timeout`、`connection_error`、`http_error`、`invalid_response`、`output_truncated`、`model_not_found`、`unsupported_model`。未配置视觉服务时 `providers.vision` 为 `None`；处理模块负责将可选能力失败转为警告或回退整图编码。`check_connection()` 仅检查服务模型列表，不代表推理或检索质量验收通过。
+
+### 结构化决策
+
+`providers.decision` 调用 vLLM 的 `POST {基址}/systemone`：一次请求针对同一 `state` 提出 `choice`、`noul`、`score` 三类问题，返回每个允许答案的概率、`confidence` 与 `label_mass`，适合分类与路由。`DECISION_BASE_URL`、`DECISION_MODEL` 同时为空时 `providers.decision` 为 `None`；`DECISION_MODEL_PROFILE` 默认 `auto`，按模型 ID 区分 Decision 3.0（`d3`，固定提示词、单题一问、`choice` 上限 255）、Clef-Flash/Omni（`clef`，固定提示词、选项上限 26）与其他受支持模型（`generic`，允许 `instructions`、选项按 A–Z 上限 26）。请求超过 64 个问题、选项或档位越界、在固定提示词方言下传 `instructions` 都会本地报 `invalid_input`，不发请求。
+
+```python
+from mmkb.providers.systemone import ChoiceQuestion, ScoreQuestion
+
+with build_providers() as providers:
+    if providers.decision is not None:
+        result = providers.decision.decide(
+            {"ticket": "我的银行卡在同一笔订单里被扣了两次款。"},
+            {
+                "team": ChoiceQuestion({"billing": "支付与退款", "shipping": "物流配送"}),
+                "tone": ScoreQuestion(["平静", "不满", "愤怒"]),
+            },
+        )
+        team, tone = result["team"], result["tone"]
+        team.value, team.confidence, team.label_mass
+        tone.level_name           # 期望档位对应的档位名
+```
+
+配置 `vllm-sr/d3-mini`（如 `http://localhost:8004/v1`）、三种问题类型的 `criteria` 与答案字段、响应校验、真实服务验证命令见 [结构化决策适配](docs/systemone.md)。当前处理流水线仍使用 `vision.classify`，决策能力未接入 Worker。
 
 默认离线测试使用 HTTPX MockTransport，不访问模型服务或数据库：
 

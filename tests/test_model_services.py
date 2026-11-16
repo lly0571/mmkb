@@ -7,6 +7,7 @@ import zlib
 from pathlib import Path
 
 from mmkb.providers import ImageInput, build_providers
+from mmkb.providers.systemone import ChoiceQuestion, NoulQuestion, ScoreQuestion
 
 
 def solid_png() -> bytes:
@@ -44,6 +45,37 @@ class ModelServiceTests(unittest.TestCase):
         self.assertTrue(vision.caption(self.image, structured=True))
         self.assertEqual(vision.ocr(self.image), "")
         self.assertEqual(vision.classify(self.image), "visual_image")
+
+    def test_decision_smoke(self):
+        """One multi-question read; expects a served /v1/systemone model such as vllm-sr/d3-mini."""
+        decision = self.providers.decision
+        if decision is None:
+            self.skipTest("decision service is disabled")
+        decision.check_connection()
+        result = decision.decide("我的银行卡在同一笔订单里被扣了两次款。", {
+            "team": ChoiceQuestion({"billing": "支付与退款", "shipping": "物流配送", "security": "账号登录"}),
+            "urgent": NoulQuestion(true="涉及资金损失或账号无法登录"),
+            "tone": ScoreQuestion(["平静", "不满", "愤怒"]),
+        })
+        self.assertEqual(list(result.answers), ["team", "urgent", "tone"])
+        self.assertEqual(result["team"].type, "choice")
+        self.assertIn(result["team"].value, ("billing", "shipping", "security"))
+        self.assertIsInstance(result["urgent"].value, bool)
+        self.assertIn(result["tone"].level_name, ("平静", "不满", "愤怒"))
+        for answer in result.answers.values():
+            self.assertAlmostEqual(math.fsum(answer.probabilities.values()), 1.0, places=6)
+            self.assertTrue(0.0 <= answer.confidence <= 1.0)
+            self.assertGreater(result.usage.input_tokens, 0)
+            self.assertGreaterEqual(result.usage.output_tokens, 0)
+
+    def test_decision_image_input(self):
+        decision = self.providers.decision
+        if decision is None:
+            self.skipTest("decision service is disabled")
+        # The Decision 3.0 prompt is fixed, so the question itself goes into the state.
+        answer = decision.choose("这张图片属于哪一类？", ["chart", "document", "photo"], images=[self.image])
+        self.assertIn(answer.value, ("chart", "document", "photo"))
+        self.assertEqual(answer.type, "choice")
 
     def test_supplied_visual_samples(self):
         """Optional representative samples; paths stay in local environment."""

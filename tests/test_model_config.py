@@ -39,15 +39,38 @@ class ModelConfigTests(unittest.TestCase):
         os.environ["CAPTION_TIMEOUT_SECONDS"] = "25"
         self.assertEqual(load_model_config().caption.timeout_seconds, 25)
 
+    def test_decision_configuration_is_optional(self):
+        self.assertIsNone(load_model_config().decision)
+        self.assertEqual(load_model_config().decision_profile, "auto")
+        os.environ.update(DECISION_BASE_URL="http://localhost:8004/v1", DECISION_MODEL="vllm-sr/d3-mini",
+                          DECISION_API_KEY="decision-key")
+        decision = load_model_config().decision
+        self.assertEqual((decision.base_url, decision.model), ("http://localhost:8004/v1", "vllm-sr/d3-mini"))
+        self.assertEqual((decision.api_key, decision.timeout_seconds), ("decision-key", 60.0))
+        os.environ["DECISION_TIMEOUT_SECONDS"] = "15"
+        self.assertEqual(load_model_config().decision.timeout_seconds, 15)
+
+    def test_decision_profile(self):
+        os.environ.update(DECISION_BASE_URL="http://localhost:8004/v1", DECISION_MODEL="vllm-sr/d3-mini")
+        for value, expected in (("", "auto"), ("auto", "auto"), ("D3", "d3"), (" CLEF ", "clef"), (" generic ", "generic")):
+            with self.subTest(value=value):
+                os.environ["DECISION_MODEL_PROFILE"] = value
+                self.assertEqual(load_model_config().decision_profile, expected)
+        for value in ("omni", "decision-3"):
+            with self.subTest(value=value), patch.dict(os.environ, {"DECISION_MODEL_PROFILE": value}):
+                with self.assertRaisesRegex(ValueError, "DECISION_MODEL_PROFILE"):
+                    load_model_config()
+
     def test_partial_or_missing_configuration(self):
         for variable in ("EMBEDDING_BASE_URL", "EMBEDDING_MODEL"):
             with self.subTest(variable=variable), patch.dict(os.environ, {variable: " "}):
                 with self.assertRaisesRegex(ValueError, variable):
                     load_model_config()
-        for variable in ("CAPTION_BASE_URL", "CAPTION_MODEL"):
-            with self.subTest(variable=variable), patch.dict(os.environ, {variable: "configured"}):
-                with self.assertRaises(ValueError):
-                    load_model_config()
+        for prefix in ("CAPTION", "DECISION"):
+            for variable in (f"{prefix}_BASE_URL", f"{prefix}_MODEL"):
+                with self.subTest(variable=variable), patch.dict(os.environ, {variable: "configured"}):
+                    with self.assertRaises(ValueError):
+                        load_model_config()
 
     def test_dimensions_and_timeouts(self):
         for value in ("1024", "bad"):

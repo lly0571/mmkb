@@ -21,7 +21,7 @@ flowchart TD
     RES --> DB[(现有 SQLAlchemy 模型)]
     WORKER -->|领取与提交| DB
     PROCESS --> STORE
-    PROCESS --> MODEL[模型适配：Embedding / Caption / OCR]
+    PROCESS --> MODEL[模型适配：Embedding / Caption / OCR / 结构化决策]
     PROCESS -->|共享分词函数| SEARCH
     SEARCH --> MODEL
     SEARCH --> DB
@@ -37,7 +37,7 @@ flowchart TD
 | --- | --- | --- |
 | **资源管理 `resources`** | 图片、图文、文本导入；元数据、详情、编辑、重试、删除和原件访问；协调文件保存与数据库提交 | 创建返回资源 ID 与状态；列表和详情返回资料信息；编辑携带 revision；提供逻辑删除、失败重试及删除后清理操作 |
 | **资料处理 `processing`** | 五条工作流路由；组织 OCR、Caption、编码和分词；生成待提交结果 | 输入资料快照和 revision，输出解析字段、唯一向量、分词文本及警告；计算过程不自行提交结果 |
-| **模型适配 `providers`** | 封装 Embedding、Caption、OCR 的调用协议、超时和结果校验 | Embedding 接收文本、图片或图文及查询/资料用途，返回统一向量；Caption/OCR 返回文字和可选附加信息；图像路线判断通过可选图像能力提供 |
+| **模型适配 `providers`** | 封装 Embedding、Caption、OCR 与可选结构化决策（`/v1/systemone`）的调用协议、超时和结果校验 | Embedding 接收文本、图片或图文及查询/资料用途，返回统一向量；Caption/OCR 返回文字和可选附加信息；图像路线判断通过可选图像能力提供；决策适配针对一个 state 返回 `choice`/`noul`/`score` 答案的概率与置信度，调用方式见 [决策模型适配](systemone.md) |
 | **文件存储 `storage`** | 统一 Local 与 S3 兼容存储；原件读写、文件属性、删除与缩略图缓存 | `put / open / stat / delete`；输入存储配置与相对 key，返回文件属性或可关闭的读取流 |
 | **检索 `retrieval`** | 查询编码、向量召回、过滤、排序；共享 Jieba 分词与可选关键词辅助 | 接收文本、图片或图文查询、标签条件和 Top-K，返回资源摘要、得分及实际检索模式；单独提供可复用的分词函数 |
 
