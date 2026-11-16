@@ -43,9 +43,10 @@ uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8000
 
 需要 Python 3.11 及以上版本，以及已经创建的 PostgreSQL 数据库。目标数据库须预先在 `public` schema 中启用 pgvector 扩展。
 
+后续开发统一使用名为 `mmkb` 的 Conda 环境。依赖安装、Python 命令、Alembic 迁移和测试均在该环境中执行；以下命令从项目根目录运行。
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+conda activate mmkb
 python -m pip install -e .
 ```
 
@@ -106,7 +107,7 @@ RUN_MODEL_INTEGRATION=1 python -m unittest discover -s tests -p 'test_model_serv
 
 ## 数据库迁移
 
-初始化和后续升级都通过 Alembic 执行，命令会修改 `DATABASE_URL` 指定的数据库：
+先激活 `mmkb` Conda 环境。初始化和后续升级都通过 Alembic 执行，命令会修改 `DATABASE_URL` 指定的数据库：
 
 ```bash
 alembic upgrade head

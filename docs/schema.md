@@ -74,4 +74,4 @@ erDiagram
 
 `migrations/env.py` 以 `Base.metadata` 为目标，仅比较业务 schema。表和索引使用 Alembic 结构化操作，schema 创建和删除使用 SQLAlchemy 的 DDL 对象。pgvector 扩展属于数据库部署前置依赖，业务回滚不删除该扩展。
 
-通过 `alembic upgrade head` 初始化或升级，不在应用启动时调用 `create_all()` 绕过迁移历史。自动生成的候选迁移需经过检查；历史迁移保留生成时的定义，不导入可能变化的运行时 ORM。命令和环境配置见 [README](../README.md)。
+开发、迁移和测试统一使用 `mmkb` Conda 环境，执行命令前先运行 `conda activate mmkb`。通过 `alembic upgrade head` 初始化或升级，不在应用启动时调用 `create_all()` 绕过迁移历史。自动生成的候选迁移需经过检查；历史迁移保留生成时的定义，不导入可能变化的运行时 ORM。命令和环境配置见 [README](../README.md)。
