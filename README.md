@@ -2,7 +2,7 @@
 
 多模态知识库的 Python 基础项目，使用 PostgreSQL、pgvector、SQLAlchemy ORM 和 Alembic 管理资料与检索数据。
 
-目前提供数据库模型、初始迁移和检索配置加载器。导入、模型调用、检索 API、存储适配器和 Web 界面尚未实现。
+目前提供数据库模型、初始迁移、配置加载器和模型适配客户端。模型适配支持文本、图片、图文 Embedding，以及可选视觉服务的 Caption、OCR 和图片分类。
 
 ## 数据结构
 
@@ -39,9 +39,51 @@ python -m pip install -e .
 | `EMBEDDING_MODEL` | API 实际提供的模型 ID |
 | `EMBEDDING_DIMENSIONS` | 固定为 `2048`，与当前 Schema 一致 |
 
-模型地址和模型 ID 没有内置部署默认值。加载检索配置时必须提供它们；操作系统环境变量优先于 `.env.local`。Caption 与存储变量目前是后续 Provider 的配置约定。
+模型地址和模型 ID 没有内置部署默认值。加载模型或检索配置时必须提供 Embedding 地址和模型；操作系统环境变量优先于 `.env.local`。
 
 `.env.local`、本地数据及内部文档目录均被 Git 忽略。公开模板不包含可用的服务地址或凭证。
+
+## 模型适配
+
+Embedding 客户端面向支持 `messages` 多模态扩展的 vLLM Qwen3-VL Embedding 服务；图文使用一次原生联合编码。视觉客户端使用兼容 Chat Completions 的图像模型服务，发送 `chat_template_kwargs.enable_thinking=false` 关闭 Qwen 思考模式，三项能力共用 `CAPTION_BASE_URL` 与 `CAPTION_MODEL`。两个变量均为空时关闭视觉能力，仅填写其中一项会报配置错误。OCR 首版只提取全文，不提供坐标、版面结构或置信度。
+
+基址填写 API 根路径（通常以 `/v1` 结尾），客户端追加 `embeddings`、`chat/completions` 或 `models`。可选的 `EMBEDDING_API_KEY`、`CAPTION_API_KEY` 通过 Bearer 认证发送；为空时不发送认证头。`EMBEDDING_TIMEOUT_SECONDS` 默认 60，`CAPTION_TIMEOUT_SECONDS` 默认 120，表示网络读写与连接池等待超时；连接超时固定为 5 秒，不自动重试。
+
+```python
+from pathlib import Path
+from mmkb.providers import ImageInput, ProviderError, build_providers
+
+with build_providers() as providers:
+    query = providers.embedding.embed(purpose="query", text="查询文字")
+    image = ImageInput(Path("sample.png").read_bytes(), "image/png")
+    document = providers.embedding.embed(
+        purpose="document", image=image, text="图片配文",
+    )
+    if providers.vision is not None:
+        caption = providers.vision.caption(image, structured=True)
+        ocr_text = providers.vision.ocr(image)
+        image_kind = providers.vision.classify(image)
+```
+
+`purpose` 必填，查询与资料共用预处理和模型；调整提示词或更换模型后需要重建已有向量。图片由调用方读取为字节，MIME 支持 `image/png`、`image/jpeg`、`image/webp`，适配器将原始字节编码为 data URL，解码和模型预处理由服务端完成。向量必须为 2048 维有限数值且非零，返回前完成 L2 归一化。输入超限或视觉输出截断会明确报错，不自动裁剪或分块。
+
+调用失败抛出 `ProviderError`，通过 `capability`、`code`、`status_code` 判断原因；错误信息不含原始请求或服务响应正文。常见错误码包括 `invalid_input`、`input_too_large`、`timeout`、`connection_error`、`http_error`、`invalid_response`、`output_truncated`、`model_not_found`。未配置视觉服务时 `providers.vision` 为 `None`；处理模块负责将可选能力失败转为警告或回退整图编码。`check_connection()` 仅检查服务模型列表，不代表推理或检索质量验收通过。
+
+默认离线测试使用 HTTPX MockTransport，不访问模型服务或数据库：
+
+```bash
+python -m unittest discover -s tests -p 'test_model_*.py' -v
+```
+
+显式启用真实服务测试（会发送短文本和生成的测试图片）：
+
+```bash
+RUN_MODEL_INTEGRATION=1 python -m unittest discover -s tests -p 'test_model_services.py' -v
+```
+
+可额外设置 `MODEL_TEST_PHOTO`、`MODEL_TEST_CHART`、`MODEL_TEST_OCR` 为本地 PNG 样本路径，验证普通图片、图表和中英混合截图；`MODEL_TEST_OCR_EXPECTED` 可指定必须识别到的文字片段。测试结果应区分协议通过与真实资料上的质量表现。
+
+协议依据：[vLLM 多模态 Embedding](https://docs.vllm.ai/en/stable/models/pooling_models/embed/)、[Qwen3-VL Embedding 示例](https://github.com/QwenLM/Qwen3-VL-Embedding/blob/main/examples/embedding_vllm.ipynb)、[vLLM 思考模式参数](https://docs.vllm.ai/en/stable/features/reasoning_outputs/)。
 
 ## 数据库迁移
 
