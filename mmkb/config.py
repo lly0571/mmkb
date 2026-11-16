@@ -9,6 +9,40 @@ from dotenv import load_dotenv
 
 # A schema change and a full reindex are required to change this value.
 EMBEDDING_DIMENSIONS = 2048
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class StorageConfig:
+    storage_backend: str = "local"
+    storage_profile_name: str = "local-default"
+    local_storage_root: str = "./data/assets"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str | None = None
+    s3_region: str = "us-east-1"
+    s3_credential_profile: str | None = None
+    s3_addressing_style: str = "path"
+    s3_signature_version: str = "s3v4"
+
+
+def load_storage_config() -> StorageConfig:
+    """Load storage independently of database and model configuration."""
+    _load_environment()
+    backend = os.environ.get("STORAGE_BACKEND", "local").strip()
+    name = os.environ.get("STORAGE_PROFILE_NAME", "").strip() or f"{backend}-default"
+    if backend not in {"local", "s3"}:
+        raise ValueError("STORAGE_BACKEND must be local or s3")
+    return StorageConfig(
+        storage_backend=backend,
+        storage_profile_name=name,
+        local_storage_root=os.environ.get("LOCAL_STORAGE_ROOT", "./data/assets").strip(),
+        s3_endpoint_url=os.environ.get("S3_ENDPOINT_URL", "").strip() or None,
+        s3_bucket=os.environ.get("S3_BUCKET", "").strip() or None,
+        s3_region=os.environ.get("S3_REGION", "us-east-1").strip(),
+        s3_credential_profile=os.environ.get("S3_CREDENTIAL_PROFILE", "").strip() or None,
+        s3_addressing_style=os.environ.get("S3_ADDRESSING_STYLE", "path").strip(),
+        s3_signature_version=os.environ.get("S3_SIGNATURE_VERSION", "s3v4").strip(),
+    )
 
 
 @dataclass(frozen=True)
