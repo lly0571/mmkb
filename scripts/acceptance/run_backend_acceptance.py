@@ -206,22 +206,16 @@ class Acceptance:
             warnings = (body.get("extra", {}).get("processing", {}) or {}).get("warnings", [])
             if warnings:
                 notes.append(f"{sid}: warnings={warnings}")
-            if s["route"] in {"structured_image", "visual_image"} and not (body.get("caption") or "").strip():
+            if s["route"] in {"structured_image", "info_rich_image"} and not (body.get("caption") or "").strip():
                 # Processing explicitly permits whole-image fallback after truncated optional
                 # vision output. Require its exact warning; unexplained missing text still fails.
                 if {"stage": "caption", "code": "output_truncated"} in warnings:
                     notes.append(f"{sid}: caption truncated; recorded whole-image fallback")
                 else:
                     problems.append(f"{sid}: caption missing for {s['route']}")
-            if s["route"] == "visdoc":
-                warn_codes = {w.get("code") for w in warnings}
-                if body.get("ocr_text") is None and "output_truncated" not in warn_codes:
-                    problems.append(f"{sid}: visdoc ocr_text null without truncation warning")
-                for snip in s.get("ocr_snippets", []):
-                    if snip in (body.get("ocr_text") or ""):
-                        notes.append(f"{sid}: OCR hit {snip!r}")
-                    else:
-                        notes.append(f"{sid}: OCR miss {snip!r} (recorded, not a gate)")
+            if s["route"] in {"visdoc", "visual_image"}:
+                if body.get("caption") is not None or body.get("ocr_text") is not None:
+                    problems.append(f"{sid}: image-only route must not auto-generate text")
             if body.get("caption") is not None and s["route"] == "text_image":
                 problems.append(f"{sid}: text_image must not auto-caption")
         return self.end(FAIL if problems else PASS, "; ".join(problems[:6]) or ("; ".join(notes[:8]) or "all ready, no warnings"))
@@ -242,7 +236,7 @@ class Acceptance:
                 continue
             observed[sid] = {"workflow": body["workflow"], "status": body["status"],
                              "warnings": body.get("extra", {}).get("processing", {}).get("warnings", [])}
-            if body["status"] == "ready" and body["workflow"] not in {"structured_image", "visual_image", "visdoc"}:
+            if body["status"] == "ready" and body["workflow"] not in {"structured_image", "info_rich_image", "visual_image", "visdoc"}:
                 problems.append(f"{sid}: classifier returned invalid route {body['workflow']}")
         self.state["observations_live03"] = observed
         self.save_state()
@@ -387,7 +381,7 @@ class Acceptance:
             else:
                 notes.append("empty ocr_text preserved, no regeneration")
         # explicit null on a route that needs it -> regenerated
-        sid = "v-skater"
+        sid = "s-cpu-spec"
         rec = self.state["resources"][sid]
         r = self.client.patch(f"/api/resources/{rec['resource_id']}", json={"revision": rec["revision"], "caption": None})
         if r.status_code != 200:
@@ -399,7 +393,7 @@ class Acceptance:
             elif not (body.get("caption") or "").strip():
                 problems.append("caption not regenerated after null")
             else:
-                notes.append("visual_image caption regenerated after explicit null")
+                notes.append("structured_image caption regenerated after explicit null")
         # text_image must not auto-analyze
         sid = "t-selfie"
         rec = self.state["resources"][sid]

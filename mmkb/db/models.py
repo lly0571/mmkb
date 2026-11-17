@@ -84,7 +84,7 @@ class Resource(Base):
     )
     workflow: Mapped[str | None] = mapped_column(
         sa.Text,
-        comment="处理路线：structured_image、visual_image、visdoc、text_image、text；未路由时为空",
+        comment="处理路线：structured_image、info_rich_image、visual_image、visdoc、text_image、text；未路由时为空",
     )
     title: Mapped[str] = mapped_column(
         sa.Text, server_default="", comment="资料展示标题，未设置时为空串",

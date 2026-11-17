@@ -14,7 +14,7 @@ VERSION_TABLE = f"{VERSION_TABLE_SCHEMA}.{VERSION_TABLE_NAME}"
 VERSION_COLUMN = "version_num"
 
 # Linear history in application order; the last entry is the only acceptable head.
-EXPECTED_REVISIONS: tuple[str, ...] = ("0001_initial_schema", "0002_import_items")
+EXPECTED_REVISIONS: tuple[str, ...] = ("0001_initial_schema", "0002_import_items", "0003_image_routing")
 EXPECTED_HEAD = EXPECTED_REVISIONS[-1]
 
 # Business tables the retrieval and resource paths must be able to read.

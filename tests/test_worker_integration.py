@@ -15,12 +15,14 @@ import pytest
 import sqlalchemy as sa
 
 from mmkb.api import create_app
-from mmkb.config import AppConfig
+from mmkb.config import AppConfig, RoutingConfig
 from mmkb.db.models import Resource, ResourceIndex, StorageProfile
 from mmkb.db.session import create_session_factory
 from mmkb.errors import ResourceError, StorageError
 from mmkb.processing import Processor
 from mmkb.providers import ImageInput, ProviderError, Providers
+from mmkb.providers.systemone import Answer
+from mmkb.image_types import IMAGE_CATEGORIES
 from mmkb.resources import ResourceService
 from mmkb.search import SearchService
 from mmkb.storage import StorageResolver, initialize_profile
@@ -63,6 +65,7 @@ def setup(worker_sessions, tmp_path):
     embedding.embed.return_value = [1.0] + [0.0] * 2047
     vision.classify.return_value = "visual_image"
     vision.caption.return_value = "图片描述"
+    vision.caption_info_rich.return_value = "关键错误码 E123 的截图"
     vision.ocr.return_value = "图片文字"
     processor = Processor(Providers(embedding, vision))
     worker = Worker(sessions, config, resolver, processor)
@@ -81,7 +84,7 @@ def compute(worker, claimed, image_bytes=None):
 
 
 @pytest.mark.parametrize("kind,route", [("image", "structured_image"), ("image", "visual_image"),
-    ("image", "visdoc"), ("text_image", "text_image"), ("text", "text")])
+    ("image", "visdoc"), ("image", "info_rich_image"), ("text_image", "text_image"), ("text", "text")])
 def test_import_process_search_and_delete_end_to_end(setup, kind, route):
     sessions, config, resolver, model, worker, _, image = setup
     query = SearchService(sessions, config, client_factory=lambda: model)
@@ -98,6 +101,13 @@ def test_import_process_search_and_delete_end_to_end(setup, kind, route):
             detail = client.get(f"/api/resources/{resource_id}").json()
             assert detail["status"] == "ready" and detail["workflow"] == route
             assert detail["extra"]["processing"]["warnings"] == []
+            routing = detail["extra"]["processing"]["routing"]
+            assert routing["revision"] == detail["revision"]
+            assert routing["source"] == ("preset" if kind == "image" else "input_kind")
+            assert detail["extra"]["processing"]["encoding"] == (
+                "image_caption" if route in {"structured_image", "info_rich_image"}
+                else "image_user_text" if kind == "text_image" else "text_only" if kind == "text" else "image_only"
+            )
             for inputs in ({"data": {"text": "query", "tags": "标签"}},
                            {"files": {"file": ("query.png", image)}},
                            {"data": {"text": "query"}, "files": {"file": ("query.png", image)}}):
@@ -127,6 +137,43 @@ def test_edit_fences_both_old_success_and_old_failure(setup):
     with sessions() as session:
         index = session.get(ResourceIndex, created["id"])
         assert "人工" in index.segmented_text and index.embedding is not None
+
+
+def test_auto_systemone_route_metadata_is_committed_with_the_current_revision(setup):
+    sessions, _, _, _, worker, service, image = setup
+    decision = Mock()
+    probabilities = {name: .94 if name == "info_rich_image" else .02 for name in IMAGE_CATEGORIES}
+
+    def classify(*args, **kwargs):
+        assert sessions.kw["bind"].pool.checkedout() == 0
+        return Answer("image_type", "choice", probabilities, .9, choice="info_rich_image", label_mass=.95)
+
+    decision.choose.side_effect = classify
+    worker.processor.providers.decision = decision
+    created = service.create(source=BytesIO(image))
+    old = compute(worker, worker.claim(), image)
+    edited = service.update(created["id"], created["revision"], {"caption": "人工 E123"})
+    assert not worker.complete(old)
+    assert "processing" not in service.get(created["id"])["extra"]
+    assert worker.run_once()["outcome"] == "ready"
+    detail = service.get(created["id"])
+    metadata = detail["extra"]["processing"]
+    assert detail["caption"] == "人工 E123" and detail["workflow"] == "info_rich_image"
+    assert metadata["routing"]["source"] == "systemone"
+    assert metadata["routing"]["revision"] == edited["revision"]
+    assert metadata["encoding"] == "image_caption"
+    assert detail["extra"]["mime_type"] == "image/png"
+
+
+def test_llm_primary_route_is_usable_without_decision_configuration(setup):
+    _, _, _, _, worker, service, image = setup
+    worker.processor.routing_config = RoutingConfig(backend="llm")
+    worker.processor.providers.vision.classify.return_value = "info_rich_image"
+    created = service.create(source=BytesIO(image))
+    assert worker.run_once()["outcome"] == "ready"
+    detail = service.get(created["id"])
+    assert detail["workflow"] == "info_rich_image"
+    assert detail["extra"]["processing"]["routing"]["source"] == "llm"
 
 
 def test_deletion_fences_late_model_results(setup):
@@ -189,6 +236,7 @@ def test_index_failure_rolls_back_ready_state_and_parsed_fields(setup):
     with sessions() as session:
         resource = session.get(Resource, created["id"])
         assert resource.status == "processing" and resource.caption is None
+        assert "processing" not in resource.extra
         assert session.get(ResourceIndex, created["id"]) is None
     assert worker.complete(result)
 

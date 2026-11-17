@@ -18,12 +18,12 @@ from mmkb.errors import ResourceError
 from mmkb.health import HealthReport, HealthService
 from mmkb.health_runner import SubprocessProbeRunner
 from mmkb.imports import ImportService
+from mmkb.image_types import Workflow
 from mmkb.resources import ResourceService
 from mmkb.search import SearchService
 from mmkb.storage import StorageResolver
 
 logger = logging.getLogger(__name__)
-Workflow = Literal["structured_image", "visual_image", "visdoc", "text_image", "text"]
 Status = Literal["pending", "processing", "ready", "failed"]
 InputKind = Literal["image", "text_image", "text"]
 

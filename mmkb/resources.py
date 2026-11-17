@@ -14,10 +14,10 @@ from mmkb.db.models import Resource, ResourceIndex, StorageProfile
 from mmkb.db.session import create_session_factory
 from mmkb.errors import ResourceError, StorageError
 from mmkb.images import inspect_image
+from mmkb.image_types import IMAGE_WORKFLOWS
 from mmkb.storage import StorageResolver, validate_key
 
 logger = logging.getLogger(__name__)
-IMAGE_WORKFLOWS = {"structured_image", "visual_image", "visdoc"}
 STATUSES = {"pending", "processing", "ready", "failed"}
 INPUT_KINDS = {"image", "text_image", "text"}
 EDIT_FIELDS = {"title", "tags", "user_text", "caption", "ocr_text", "workflow"}

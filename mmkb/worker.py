@@ -12,7 +12,7 @@ import time
 
 import sqlalchemy as sa
 
-from mmkb.config import AppConfig, load_app_config
+from mmkb.config import AppConfig, load_app_config, load_routing_config
 from mmkb.db.models import Resource, ResourceIndex, StorageProfile
 from mmkb.db.session import create_session_factory
 from mmkb.embedding import EmbeddingError
@@ -151,6 +151,8 @@ class Worker:
             previous = extra.get("processing")
             metadata = dict(previous) if isinstance(previous, dict) else {}
             metadata["warnings"] = result.warnings
+            metadata["routing"] = result.routing
+            metadata["encoding"] = result.encoding
             extra["processing"] = metadata
             resource.extra = extra
             resource.status, resource.error, resource.updated_at = "ready", None, utcnow()
@@ -240,7 +242,8 @@ def main():
             processor = None
             if args.command == "run":
                 providers = build_providers()
-                processor = Processor(providers, max_text_chars=config.max_text_chars)
+                processor = Processor(providers, max_text_chars=config.max_text_chars,
+                                      routing_config=load_routing_config())
             worker = Worker(sessions, config, resolver, processor, ensure_owner=guard.check)
             if args.command == "recover-processing":
                 print(json.dumps({"requeued": worker.recover_processing()}))

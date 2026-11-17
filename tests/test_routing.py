@@ -7,10 +7,12 @@ import pytest
 
 from mmkb.config import RoutingConfig, ServiceConfig, load_routing_config
 from mmkb.image_types import IMAGE_CATEGORIES
+from mmkb.processing import Processor, ResourceSnapshot
 from mmkb.providers import ImageInput, ProviderError, Providers
 from mmkb.providers.systemone import Answer, SystemOneProvider
 from mmkb.providers.vision import VisionProvider
 from mmkb.routing import ClassificationResult, ImageRouter, decision_rejection
+from uuid import uuid4
 
 IMAGE = ImageInput(b"original", "image/png")
 
@@ -95,6 +97,16 @@ def test_no_optional_providers_still_selects_image_encoding():
     assert all(attempt["status"] == "skipped" for attempt in route.attempts)
 
 
+@pytest.mark.parametrize("kind,workflow,text", [
+    ("image", "info_rich_image", None), ("image", "visdoc", None),
+    ("text", "text", "note"), ("text_image", "text_image", "note"),
+])
+def test_preset_and_input_routes_never_classify(kind, workflow, text):
+    p = providers()
+    snapshot = ResourceSnapshot(uuid4(), 2, kind, workflow, user_text=text, caption="人工描述")
+    Processor(p).process(snapshot, image=IMAGE if kind != "text" else None)
+    p.decision.choose.assert_not_called()
+    p.vision.classify.assert_not_called()
 
 
 def test_real_protocol_adapters_reach_systemone_and_fall_back_to_chat():

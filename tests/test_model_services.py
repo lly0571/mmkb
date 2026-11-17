@@ -83,15 +83,18 @@ class ModelServiceTests(unittest.TestCase):
         if vision is None:
             self.skipTest("vision service is disabled")
         samples = [("MODEL_TEST_PHOTO", "visual_image"), ("MODEL_TEST_CHART", "structured_image"),
-                   ("MODEL_TEST_OCR", "visdoc")]
+                   ("MODEL_TEST_OCR", "info_rich_image")]
         if not all(os.environ.get(name) for name, _ in samples):
             self.skipTest("set MODEL_TEST_PHOTO, MODEL_TEST_CHART and MODEL_TEST_OCR to PNG sample paths")
         for name, expected in samples:
             with self.subTest(sample=name):
                 image = ImageInput(Path(os.environ[name]).read_bytes(), "image/png")
-                self.assertTrue(vision.caption(image, structured=expected == "structured_image"))
+                if expected == "info_rich_image":
+                    self.assertTrue(vision.caption_info_rich(image))
+                else:
+                    self.assertTrue(vision.caption(image, structured=expected == "structured_image"))
                 self.assertEqual(vision.classify(image), expected)
-                if expected == "visdoc":
+                if expected == "info_rich_image":
                     text = vision.ocr(image)
                     self.assertTrue(text)
                     if os.environ.get("MODEL_TEST_OCR_EXPECTED"):
