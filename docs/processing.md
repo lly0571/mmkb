@@ -6,10 +6,24 @@
 
 在项目根目录激活 `mmkb` Conda 环境，先完成 Alembic 迁移、pgvector 启用和存储 profile 初始化，具体步骤见 [README](../README.md)。API 与 Worker 使用相同的数据库、资料存储和 Embedding 配置；配置优先级为进程环境高于 `.env.local`。
 
+推荐用一个命令同时启动两者：
+
+```bash
+python -m mmkb.server
+```
+
+统一入口默认 API 地址为 `127.0.0.1:8010`，Worker 空闲间隔为 2 秒；支持 `--host`、`--port`、`--poll-seconds`、`--shutdown-timeout`。适用于 POSIX 环境。它先绑定并传递监听 socket，端口占用时不会启动 Worker；之后启动单进程 Uvicorn 与独立 Worker。两者共享启动时的环境配置，原数据库单 Worker 锁继续生效，已有独立 Worker 会使本次统一启动失败。Uvicorn 固定一个 worker，移除继承的 reload 开关，不使用热重载。
+
+任一子进程退出（包括意外的退出码 0）、启动失败或 Worker 失去数据库锁，统一入口都会停止其余进程并非零退出；不会留下可接收导入而无人处理的 API。正常 Ctrl+C/SIGTERM 停止整个后端并返回 0。API 停止接收请求，Worker 完成当前资料和本轮清理，默认共享 300 秒退出预算；再次发送信号或超时会强制结束并非零退出。被中断的 processing 仍按下文显式恢复，不自动回收。
+
+统一入口不运行迁移、profile 初始化或全局恢复，也不启动 PostgreSQL、RustFS 或模型服务。仅需 API 时沿用 `uvicorn mmkb.api:create_app --factory`；仅需 Worker 时沿用下列命令。使用统一入口时无需再运行一个常驻 Worker：
+
 ```bash
 conda activate mmkb
 python -m mmkb.worker run
 ```
+
+Uvicorn 的 factory、继承 socket 与退出预算参数依据其[官方设置文档](https://github.com/kludex/uvicorn/blob/main/docs/settings.md)。
 
 运行命令可加 `--poll-seconds 2` 调整无待处理资料时的等待间隔，必须是有限正数。有待处理资料时逐份连续处理；每轮还清理最多 100 条软删除资料。单份资料失败不会终止常驻进程。
 

@@ -22,16 +22,24 @@
 conda activate mmkb
 python -m pip install -e '.[test]'
 python -m mmkb.storage init
-uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8000
+python -m mmkb.server
 ```
 
-数据库须先完成下文的 Alembic 迁移。打开 `http://127.0.0.1:8000/docs` 可试用接口。存储初始化不会创建 Bucket 或覆盖已有 profile；API 启动不修改存储配置。资源管理不依赖模型配置，导入后进入 `pending`，由独立启动的 Worker 处理。
+数据库须先完成下文的 Alembic 迁移。`python -m mmkb.server` 一次启动资源/搜索 API 与一个 Worker，默认监听 `127.0.0.1:8010`，与 Web 开发代理默认地址一致；打开 `http://127.0.0.1:8010/docs` 可试用接口。导入后进入 `pending`，由同一次启动的 Worker 自动处理。统一入口需要配置 Embedding；视觉服务仍为可选项。
+
+API 与 Worker 保持独立进程并共享配置，任一异常退出会停止整个后端；Ctrl+C/SIGTERM 同时通知两者优雅退出。默认等待最多 300 秒，可用 `--shutdown-timeout` 调整，再次发送信号或超时会强制结束。支持 `--host`、`--port`、`--poll-seconds`，不启用 reload 或多 API worker。此统一入口适用于 Linux/macOS 等 POSIX 环境。
+
+存储初始化不会创建 Bucket 或覆盖已有 profile，统一启动也不自动迁移、初始化 profile 或恢复旧任务。仅运行资源管理 API 时仍可使用下列原有入口，它不要求模型配置：
+
+```bash
+uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8010
+```
 
 接口、编辑规则、删除清理命令和集成测试见 [资源管理说明](docs/resources.md)。
 
 ## 后台处理
 
-在另一个已激活 `mmkb` 环境的终端中，使用与 API 相同的数据库、存储和 Embedding 配置启动：
+统一入口已包含 Worker，无需再次启动。需要分开部署或调试时，在另一个已激活 `mmkb` 环境的终端中，使用与 API 相同的数据库、存储和 Embedding 配置单独启动：
 
 ```bash
 python -m mmkb.worker run
