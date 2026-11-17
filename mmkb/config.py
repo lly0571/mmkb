@@ -125,6 +125,33 @@ class ModelConfig:
     decision_profile: str = "auto"
 
 
+@dataclass(frozen=True)
+class RoutingConfig:
+    backend: Literal["systemone", "llm"] = "systemone"
+    # Calibrated on the frozen four-class P1 sample set; deployments can override.
+    min_probability: float = 0.80
+    min_confidence: float = 0.80
+    min_label_mass: float = 0.90
+
+    def __post_init__(self) -> None:
+        if self.backend not in {"systemone", "llm"}:
+            raise ValueError("IMAGE_ROUTING_BACKEND must be systemone or llm")
+        for name in ("min_probability", "min_confidence", "min_label_mass"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"Routing {name} must be a finite number between 0 and 1")
+
+
+def load_routing_config() -> RoutingConfig:
+    _load_environment()
+    return RoutingConfig(
+        backend=os.environ.get("IMAGE_ROUTING_BACKEND", "").strip().lower() or "systemone",
+        min_probability=float(os.environ.get("ROUTING_MIN_PROBABILITY", "0.80")),
+        min_confidence=float(os.environ.get("ROUTING_MIN_CONFIDENCE", "0.80")),
+        min_label_mass=float(os.environ.get("ROUTING_MIN_LABEL_MASS", "0.90")),
+    )
+
+
 def _load_environment() -> None:
     load_dotenv(Path(__file__).resolve().parents[1] / ".env.local", override=False)
 

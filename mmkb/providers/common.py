@@ -8,8 +8,7 @@ from typing import Literal
 import httpx
 
 from mmkb.config import ServiceConfig
-
-ImageKind = Literal["structured_image", "visual_image", "visdoc"]
+from mmkb.image_types import ImageKind
 
 ErrorCode = Literal[
     "invalid_input", "input_too_large", "timeout", "connection_error",

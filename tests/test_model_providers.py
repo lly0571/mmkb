@@ -169,11 +169,19 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(self.vision(None).ocr(self.image), "")
 
     def test_classification(self):
-        for kind in ("structured_image", "visual_image", "visdoc"):
+        for kind in ("structured_image", "info_rich_image", "visual_image", "visdoc"):
             self.assertEqual(self.vision(f" {kind}\n").classify(self.image), kind)
             self.assertEqual(json.loads(self.requests[-1].content)["max_tokens"], 32)
         for kind in ("text", "```visual_image```", "visual_image: photo", ""):
             self.assert_error("invalid_response", lambda: self.vision(kind).classify(self.image))
+
+    def test_info_rich_caption_keeps_visible_identifiers_and_uses_its_own_prompt(self):
+        provider = self.vision("错误 E123；命令 python --port 8010")
+        self.assertEqual(provider.caption_info_rich(self.image), "错误 E123；命令 python --port 8010")
+        body = json.loads(self.requests[-1].content)
+        self.assertIn("参数名", body["messages"][0]["content"])
+        self.assertIn("不要猜测", body["messages"][0]["content"])
+        self.assertEqual(body["max_tokens"], 1024)
 
     def test_vision_invalid_responses_and_truncation(self):
         for capability in ("caption", "ocr", "classify"):
