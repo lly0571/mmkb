@@ -10,12 +10,14 @@ import httpx
 from mmkb.config import ServiceConfig
 
 ImageKind = Literal["structured_image", "visual_image", "visdoc"]
+
 ErrorCode = Literal[
     "invalid_input", "input_too_large", "timeout", "connection_error",
     "http_error", "invalid_response", "output_truncated", "model_not_found",
     "unsupported_model",
 ]
 logger = logging.getLogger(__name__)
+MODELS_PATH = "models"
 
 
 class ProviderError(Exception):
@@ -47,6 +49,20 @@ def image_data_url(image: ImageInput, capability: str) -> str:
 
 def image_content(image: ImageInput, capability: str) -> dict:
     return {"type": "image_url", "image_url": {"url": image_data_url(image, capability)}}
+
+
+def model_list_url(base_url: str) -> str:
+    """Single URL rule for the model list, shared by business and health probes."""
+    return base_url.rstrip("/") + "/" + MODELS_PATH
+
+
+def validate_model_list(capability: str, payload: object, model: str) -> None:
+    """Reject malformed model lists and models the service does not serve."""
+    models = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(models, list) or any(not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in models):
+        raise ProviderError(capability, "invalid_response", "Invalid model list from service")
+    if not any(item["id"] == model for item in models):
+        raise ProviderError(capability, "model_not_found", "Configured model is not served; check the model ID")
 
 
 class ServiceClient:
@@ -107,9 +123,4 @@ class ServiceClient:
             logger.info("model capability=%s elapsed_seconds=%.3f error_code=%s", capability, time.monotonic() - started, error_code)
 
     def check_connection(self, capability: str) -> None:
-        result = self.request(capability, "GET", "models")
-        models = result.get("data")
-        if not isinstance(models, list) or any(not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in models):
-            raise ProviderError(capability, "invalid_response", "Invalid model list from service")
-        if not any(item["id"] == self.config.model for item in models):
-            raise ProviderError(capability, "model_not_found", "Configured model is not served; check the model ID")
+        validate_model_list(capability, self.request(capability, "GET", MODELS_PATH), self.config.model)

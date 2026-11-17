@@ -28,8 +28,8 @@ from mmkb.config import PROJECT_ROOT, StorageConfig, load_storage_config
 from mmkb.db.models import StorageProfile
 from mmkb.db.session import create_session_factory
 from mmkb.errors import (
-    InvalidKeyError, ObjectNotFound, ObjectNotFoundError, ResourceError,
-    StorageConfigError, StorageError,
+    InvalidKeyError, ObjectNotFound, ObjectNotFoundError, ResourceError, StorageConfigError,
+    StorageCredentialError, StorageError,
 )
 
 logger = logging.getLogger(__name__)
@@ -262,16 +262,17 @@ class S3Storage:
         self.client.close()
 
 
-def create_storage(profile: StorageProfile, settings: Settings | None = None) -> Storage:
-    """Construct an adapter from the resource's profile, without DB operations."""
+def build_s3_client(profile, settings: Settings | None = None, *, connect_timeout: float = 5.0,
+                    read_timeout: float = 30.0, total_max_attempts: int = 3):
+    """Build one S3 client for a registered profile; callers pick the timeout budget.
+
+    Business adapters keep the historical 5s/30s/3-attempt settings, while the health probe asks
+    for a short single attempt so one slow endpoint cannot widen the report deadline.
+    """
     if profile is None:
         raise StorageConfigError("Resource has no storage profile")
-    if profile.backend == "local":
-        if not profile.local_root:
-            raise StorageConfigError("Local storage profile requires an absolute root")
-        return LocalStorage(profile.local_root)
-    if profile.backend != "s3" or not profile.bucket or not profile.bucket.strip():
-        raise StorageConfigError("Invalid storage profile; initialize a valid profile")
+    if not profile.bucket or not profile.bucket.strip():
+        raise StorageConfigError("S3 storage profile requires a bucket")
     settings = settings or StorageConfig()
     if not settings.s3_region or settings.s3_addressing_style not in {"auto", "path", "virtual"}:
         raise StorageConfigError("Set a valid S3_REGION and S3_ADDRESSING_STYLE")
@@ -289,19 +290,31 @@ def create_storage(profile: StorageProfile, settings: Settings | None = None) ->
             raise StorageConfigError("S3 endpoint must be an HTTP(S) URL without credentials, query or fragment")
     try:
         session = boto3.Session(profile_name=profile.credential_ref)
-        client = session.client(
+        return session.client(
             "s3", endpoint_url=profile.endpoint_url,
             region_name=settings.s3_region,
             config=Config(
                 signature_version=settings.s3_signature_version,
                 s3={"addressing_style": settings.s3_addressing_style},
-                connect_timeout=5, read_timeout=30,
-                retries={"mode": "standard", "total_max_attempts": 3},
+                connect_timeout=connect_timeout, read_timeout=read_timeout,
+                retries={"mode": "standard", "total_max_attempts": total_max_attempts},
             ),
         )
     except (BotoCoreError, ValueError):
-        raise StorageConfigError("Cannot configure S3 client; check credentials and endpoint") from None
-    return S3Storage(profile.bucket, client)
+        raise StorageCredentialError("Cannot configure S3 client; check credentials and endpoint") from None
+
+
+def create_storage(profile: StorageProfile, settings: Settings | None = None) -> Storage:
+    """Construct an adapter from the resource's profile, without DB operations."""
+    if profile is None:
+        raise StorageConfigError("Resource has no storage profile")
+    if profile.backend == "local":
+        if not profile.local_root:
+            raise StorageConfigError("Local storage profile requires an absolute root")
+        return LocalStorage(profile.local_root)
+    if profile.backend != "s3":
+        raise StorageConfigError("Invalid storage profile; initialize a valid profile")
+    return S3Storage(profile.bucket, build_s3_client(profile, settings))
 
 
 class StorageResolver:
@@ -327,7 +340,8 @@ class StorageResolver:
             self._adapters.clear()
 
 
-def initialize_profile(sessions, config: Settings, resolver: StorageResolver) -> ProfileInfo:
+def candidate_profile_fields(config: Settings) -> dict[str, str | None]:
+    """Normalise the configured profile once; initialization and health probes compare the same fields."""
     if config.storage_backend not in {"local", "s3"} or not config.storage_profile_name.strip():
         raise StorageConfigError("Select a local/s3 backend and a non-empty profile name")
     root = None
@@ -339,12 +353,16 @@ def initialize_profile(sessions, config: Settings, resolver: StorageResolver) ->
             root = str((PROJECT_ROOT / configured).resolve())
         except (OSError, RuntimeError):
             raise StorageConfigError("Cannot resolve local storage root") from None
-    fields = dict(
+    return dict(
         backend=config.storage_backend, local_root=root,
         endpoint_url=config.s3_endpoint_url if config.storage_backend == "s3" else None,
         bucket=config.s3_bucket if config.storage_backend == "s3" else None,
         credential_ref=config.s3_credential_profile if config.storage_backend == "s3" else None,
     )
+
+
+def initialize_profile(sessions, config: Settings, resolver: StorageResolver) -> ProfileInfo:
+    fields = candidate_profile_fields(config)
     candidate = StorageProfile(id=uuid4(), name=config.storage_profile_name, **fields)
     storage = resolver(candidate)
     # Verify connectivity before opening the DB transaction. Never create a bucket.

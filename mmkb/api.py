@@ -12,9 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field
 import sqlalchemy as sa
 from starlette.exceptions import HTTPException
 
-from mmkb.config import AppConfig, load_app_config
+from mmkb.config import AppConfig, health_config_from_app, load_app_config
 from mmkb.db.session import create_session_factory
 from mmkb.errors import ResourceError
+from mmkb.health import HealthReport, HealthService
+from mmkb.health_runner import SubprocessProbeRunner
 from mmkb.imports import ImportService
 from mmkb.resources import ResourceService
 from mmkb.search import SearchService
@@ -136,14 +138,20 @@ async def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
 
 
-def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=None, search_service=None) -> FastAPI:
+def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=None, search_service=None,
+               health_service=None) -> FastAPI:
     config = config or load_app_config()
     owned_sessions = sessions is None
     owned_resolver = storage_resolver is None
+    owned_health = health_service is None
     sessions = sessions if sessions is not None else create_session_factory(config.database_url)
     resolver = storage_resolver if storage_resolver is not None else StorageResolver(config)
     owned_search = search_service is None
     search_service = search_service if search_service is not None else SearchService(sessions, config)
+    # The health snapshot is taken once per process, from the settings this app actually serves with;
+    # probes run in a child the lifespan owns. Model services still come from the environment.
+    health_service = (health_service if health_service is not None
+                      else HealthService(health_config_from_app(config), runner=SubprocessProbeRunner()))
 
     @asynccontextmanager
     async def lifespan(app):
@@ -152,8 +160,13 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
         finally:
             try:
                 try:
-                    if owned_search:
-                        search_service.close()
+                    try:
+                        if owned_health:
+                            # Cancels the round and reaps the probe child before releasing resources.
+                            await health_service.aclose()
+                    finally:
+                        if owned_search:
+                            search_service.close()
                 finally:
                     if owned_resolver:
                         resolver.close()
@@ -167,6 +180,7 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
     app.state.resources = service
     app.state.imports = imports
     app.state.search = search_service
+    app.state.health = health_service
 
     @app.exception_handler(ResourceError)
     async def resource_error(request: Request, exc: ResourceError):
@@ -190,6 +204,14 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
         return JSONResponse(status_code=503, content={
             "code": "database_unavailable", "message": "Database unavailable; check connection and migrations",
         })
+
+    # response_model stays None so the service payload is returned verbatim while the response
+    # model still documents the contract in OpenAPI.
+    @app.get("/api/health", response_model=None, dependencies=[Depends(_no_store)],
+             responses={200: {"model": HealthReport}})
+    async def health_status():
+        # A completed report always answers 200, including dependency failures; bugs still raise.
+        return await health_service.report()
 
     @app.get("/api/imports/options", response_model=ImportOptions, dependencies=[Depends(_no_store)])
     def import_options():

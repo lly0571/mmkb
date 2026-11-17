@@ -24,6 +24,13 @@ class StorageConfigError(StorageError):
         ResourceError.__init__(self, "storage_config", message, 503)
 
 
+class StorageCredentialError(StorageConfigError):
+    """Credential discovery or SDK client construction failed; values are never included."""
+
+    def __init__(self, message: str = "Cannot configure storage credentials"):
+        super().__init__(message)
+
+
 class ObjectNotFound(StorageError):
     def __init__(self):
         ResourceError.__init__(self, "original_not_found", "Original file not found", 404)
