@@ -17,6 +17,7 @@ import {
   WORKFLOW_LABELS,
 } from '../state/format'
 import { useResourceStatus } from '../state/useResourceStatus'
+import { BatchImportPanel } from './BatchImportPanel'
 
 const WORKFLOW_CHOICES: ImageWorkflow[] = ['structured_image', 'visual_image', 'visdoc']
 
@@ -30,6 +31,7 @@ export function ImportPage() {
   const [problem, setProblem] = useState('')
   const [failure, setFailure] = useState<unknown>(null)
   const [created, setCreated] = useState<CreatedResource | null>(null)
+  const [batchMode, setBatchMode] = useState(false)
 
   const hasImage = file !== null
   const hasText = userText.trim().length > 0
@@ -85,9 +87,15 @@ export function ImportPage() {
       <header className="page-head">
         <div>
           <h2>导入资料</h2>
-          <p className="muted">一次创建一份资料；提交后由后台 Worker 推进状态，前端只展示服务端状态。</p>
+          <p className="muted">{batchMode ? '按清单逐项导入，支持目录、续传和失败项重试。' : '一次创建一份资料；'}提交后由后台 Worker 推进状态。</p>
         </div>
       </header>
+
+      <div className="actions" role="group" aria-label="导入方式">
+        <button type="button" aria-pressed={!batchMode} onClick={() => setBatchMode(false)}>单份导入</button>
+        <button type="button" aria-pressed={batchMode} onClick={() => setBatchMode(true)}>批量 / 目录导入</button>
+      </div>
+      {batchMode ? <BatchImportPanel /> : <>
 
       <form
         className="panel"
@@ -203,6 +211,7 @@ export function ImportPage() {
           </p>
         </section>
       ) : null}
+      </>}
     </section>
   )
 }

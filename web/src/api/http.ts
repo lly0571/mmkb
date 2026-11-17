@@ -54,6 +54,11 @@ const STATUS_HINTS: Record<number, string> = {
 }
 
 const CODE_HINTS: Record<string, string> = {
+  import_busy: '相同图片或请求正在导入，请先核查回执后重试',
+  import_key_required: '批量导入请求缺少提交标识',
+  idempotency_conflict: '提交标识对应的图片或参数已变化，请核对清单',
+  source_changed: '图片内容与预览清单不一致，请重新核验',
+  import_resource_deleted: '该提交原先关联的资料已删除，需要新建导入清单',
   network_error: '无法连接后端，请确认 API 已启动且代理目标正确；提交结果未知时请先核对资料列表',
   parse_error: '响应格式无法解析，请检查代理是否把接口改写成了页面',
   empty_input: '请提供图片或非空文字',
@@ -162,6 +167,7 @@ async function toApiErrorFrom(response: Response): Promise<ApiError> {
 
 export interface RequestOptions {
   signal?: AbortSignal
+  headers?: Record<string, string>
 }
 
 async function send(request: Promise<Response>): Promise<Response> {
@@ -212,7 +218,7 @@ export function patchJson<T>(path: string, body: unknown, options: RequestOption
 }
 
 export function postForm<T>(path: string, form: FormData, options: RequestOptions = {}): Promise<T> {
-  return requestJson<T>(path, { method: 'POST', body: form, signal: options.signal })
+  return requestJson<T>(path, { method: 'POST', headers: options.headers, body: form, signal: options.signal })
 }
 
 /** DELETE returns 204 with no body; never try to parse JSON from it. */
