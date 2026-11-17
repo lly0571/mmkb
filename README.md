@@ -2,7 +2,7 @@
 
 多模态知识库的 Python 基础项目，使用 PostgreSQL、pgvector、SQLAlchemy ORM 和 Alembic 管理资料与检索数据。
 
-目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、五条处理路线及 Local/S3 存储。模型适配支持文本、图片、图文 Embedding，可选视觉服务的 Caption、OCR 和图片分类，以及可选结构化决策服务的 `/v1/systemone` 概率分类。
+目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、五条处理路线及 Local/S3 存储，并提供覆盖导入、检索、详情编辑与删除的 [Web 界面](docs/web.md)。模型适配支持文本、图片、图文 Embedding，可选视觉服务的 Caption、OCR 和图片分类，以及可选结构化决策服务的 `/v1/systemone` 概率分类。
 
 ## 数据结构
 
@@ -59,9 +59,19 @@ python -m mmkb.worker recover-processing
 
 文件存储已提供同步 Local/S3 适配器、读写删除接口和显式 profile 初始化入口。先应用迁移并配置存储，再运行 `python -m mmkb.storage init`；配置、调用方式和隔离集成测试见 [文件存储说明](docs/storage.md)。存储配置独立加载，不要求模型服务配置存在。
 
+## Web 界面
+
+`web/` 是 React + TypeScript + Vite 的单页应用，覆盖资料库与检索、导入、详情编辑与删除三块核心流程，只调用同源 `/api` 接口，不接触数据库、对象存储与模型凭证。浏览与搜索参数互不混用，状态由服务端轮询驱动，编辑区分“保留 / 人工字符串 / 显式 null”三种意图，失败重试只对 `failed` 开放。连接状态页与缩略图分别依赖 T05、T06，未交付时明确标为待接入。
+
+```bash
+cd web && npm ci && cp .env.example .env.local && npm run dev   # 代理目标由 .env.local 指定
+```
+
+页面能力、状态与错误约定、开发代理与静态部署见 [Web 界面说明](docs/web.md)，命令与测试清单见 [web/README.md](web/README.md)。
+
 ## 开发环境
 
-需要 Python 3.11 及以上版本，以及已经创建的 PostgreSQL 数据库。目标数据库须预先在 `public` schema 中启用 pgvector 扩展。
+需要 Python 3.11 及以上版本，以及已经创建的 PostgreSQL 数据库。前端另需满足 Vite 8 `engines` 的 Node.js（`^20.19.0 || >=22.12.0`）。目标数据库须预先在 `public` schema 中启用 pgvector 扩展。
 
 后续开发统一使用名为 `mmkb` 的 Conda 环境。依赖安装、Python 命令、Alembic 迁移和测试均在该环境中执行；以下命令从项目根目录运行。
 
