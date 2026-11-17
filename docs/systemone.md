@@ -2,7 +2,7 @@
 
 `SystemOneProvider` 封装 vLLM 的结构化决策接口：一次请求针对同一个 `state` 提出若干个带类型的问题，服务端为每个允许的答案返回概率与置信度，常用于分类与路由，不产出自由文本。适配器只负责请求协议、限制校验与响应解析，不承担工作流分支或持久化。
 
-与视觉分类的区别：`vision.classify` 走 Chat Completions，返回单个类别字符串；`providers.decision` 返回每个选项的概率、置信度与 `label_mass`，可以一次问多个问题，但要求服务端提供受支持的读取策略。当前处理流水线仍使用视觉分类，决策能力尚未接入 Worker。
+与视觉分类的区别：`vision.classify` 走 Chat Completions，返回单个类别字符串；`providers.decision` 返回每个选项的概率、置信度与可选诊断，可以一次问多个问题，但要求服务端提供受支持的读取策略。Worker 自动图片路由默认使用 SystemOne 四分类，不可信或不可用时回退基础 LLM；也支持显式选择 LLM，见 [图片路由](routing.md)。
 
 ## 启用与配置
 

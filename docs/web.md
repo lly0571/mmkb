@@ -41,7 +41,7 @@
 | 人工修正或人工置空 | 字符串（含 `""`） | Worker 保留非 null 值 |
 | 清空并重新生成 | 显式 `null` | 仅当前路线需要时自动生成；`text_image` 不自动分析 |
 
-仅图片资料可把路线改为 `workflow: null`（重新自动分类）或指定 `structured_image/visual_image/visdoc`；有配文或纯文本资料不能指定图片路线。提交前的“将提交的改动”清单列出实际字段。
+仅图片资料可把路线改为 `workflow: null`（重新自动分类）或指定 `structured_image/info_rich_image/visual_image/visdoc`；有配文或纯文本资料不能指定图片路线。首阶段只有结构图片和信息密集图片自动生成 Caption，VisDoc 和视觉图片仅整图编码；OCR 清空后不自动生成。提交前的“将提交的改动”清单列出实际字段。完整规则见 [图片路由](routing.md)。
 
 - 编辑期间的远端轮询不覆盖草稿与编辑基准；远端 revision 变化时提示，可显式“以最新详情为基准比较草稿”或放弃草稿。
 - `409` 后只重新读取最新详情，不自动以新 revision 重发旧草稿。

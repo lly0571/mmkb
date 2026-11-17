@@ -45,17 +45,18 @@ python -m mmkb.worker run
 
 恢复不需要模型配置，不调用模型；将未删除的 `processing` 资料递增 revision、移除旧索引、清除错误并置为 `pending`，输出 `{"requeued": 数量}`。客户端应重新读取 revision。恢复不会清空 Caption/OCR，也不会改动 `failed` 资料；失败资料通过资源 API 的 retry 接口重试。启动不自动恢复，不根据任务耗时回收任务。
 
-## 五条路线
+## 六条路线
 
 | 路线 | Embedding 输入 | 自动视觉调用 |
 | --- | --- | --- |
 | `structured_image` | 原图与非空 Caption 原生联合编码；无有效描述时为原图 | 结构化 Caption |
-| `visual_image` | 原图 | 普通 Caption，仅用于展示和分词 |
-| `visdoc` | 原图 | OCR 全文，仅用于展示和分词 |
+| `info_rich_image` | 原图与非空文字感知 Caption 原生联合编码；描述失败时为原图 | 保留关键文字的 Caption |
+| `visual_image` | 原图 | 首阶段无自动 Caption/OCR |
+| `visdoc` | 原图 | 首阶段无自动 OCR/Caption |
 | `text_image` | 原图与完整用户配文原生联合编码 | 无 |
 | `text` | 完整用户文字 | 无 |
 
-仅图片输入且路线为空时调用分类，分类失败或未配置视觉服务时回退 `visual_image`。已指定路线或上一次保存的路线直接复用；可用 `PATCH workflow=null` 让仅图片资料重新分类。OCR 与 Caption 分别保存，均不覆盖用户文字。
+仅图片输入且路线为空时分类，默认依次使用 SystemOne、基础 LLM 和 `visual_image` 保底。`IMAGE_ROUTING_BACKEND=llm` 可直接使用基础 LLM。已指定路线或上一次保存的路线直接复用；可用 `PATCH workflow=null` 重新分类。分类边界、诊断记录、阈值校准与编码阶段见 [图片路由](routing.md)。
 
 Caption/OCR 为非 null 时始终保留，包括人工设置的空字符串。只有字段为 null 且当前路线需要时才调用视觉服务；图文路线即使清空这两项，也不会自动分析。生成文字超过 `MAX_TEXT_CHARS` 时丢弃并记录警告，不裁剪后保存。
 
@@ -82,6 +83,6 @@ TEST_DATABASE_URL='postgresql://USER:PASSWORD@HOST/mmkb_test_worker' \
   python -m pytest tests/test_worker_integration.py -q
 ```
 
-Worker 集成测试通过 Alembic 升级，并清空测试库的资源和 storage profile，拒绝其他数据库名。覆盖五条路线的导入、三类查询、原件和删除闭环，以及人工字段保留、旧结果隔离、事务外模型调用、索引提交回滚、单实例锁、锁会话终止、恢复、清理重试和 CLI。
+Worker 集成测试通过 Alembic 升级，并清空测试库的资源和 storage profile，拒绝其他数据库名。覆盖六条路线的导入、三类查询、原件和删除闭环，以及双后端路由、人工字段保留、旧结果隔离、事务外模型调用、索引提交回滚、单实例锁、锁会话终止、恢复、清理重试和 CLI。
 
 真实模型测试仍需显式设置 `RUN_MODEL_INTEGRATION=1`，RustFS/S3 契约需独立测试配置，分别见 [README](../README.md) 和 [存储说明](storage.md)。模拟模型端到端测试验证业务协议与状态，不代表真实素材上的召回质量已验收。

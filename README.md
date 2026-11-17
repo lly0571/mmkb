@@ -2,7 +2,7 @@
 
 多模态知识库的 Python 基础项目，使用 PostgreSQL、pgvector、SQLAlchemy ORM 和 Alembic 管理资料与检索数据。
 
-目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、五条处理路线及 Local/S3 存储，并提供覆盖导入、检索、详情编辑与删除的 [Web 界面](docs/web.md)。模型适配支持文本、图片、图文 Embedding，可选视觉服务的 Caption、OCR 和图片分类，以及可选结构化决策服务的 `/v1/systemone` 概率分类。
+目前已提供“导入 → 单 Worker 处理 → 向量检索 → 查看原件”的后端闭环，包括数据库模型、迁移、资源管理与搜索 HTTP API、六条处理路线及 Local/S3 存储，并提供覆盖导入、检索、详情编辑与删除的 [Web 界面](docs/web.md)。图片支持四分类，默认使用 `/v1/systemone` 决策模型，可切换到基础 LLM；分类失败可降级为整图编码，详见 [图片路由](docs/routing.md)。
 
 ## 数据结构
 
@@ -48,7 +48,7 @@ uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8010
 python -m mmkb.worker run
 ```
 
-Worker 处理五条路线，成功后原子写入解析结果、2048 维索引和 `ready` 状态。已有非 null Caption/OCR 会被保留，视觉增强失败写入警告；必要处理失败进入 `failed`，可通过资源 API 重试。每个数据库只允许一个 Worker。
+Worker 处理六条路线，成功后原子写入路由记录、解析结果、2048 维索引和 `ready` 状态。已有非 null Caption/OCR 会被保留，视觉增强失败写入警告；必要处理失败进入 `failed`，可通过资源 API 重试。每个数据库只允许一个 Worker。
 
 ```bash
 # 至多处理一份资料，并清理一批已删除资料
@@ -116,7 +116,7 @@ python -m pip install -e .
 
 ## 模型适配
 
-Embedding 客户端面向支持 `messages` 多模态扩展的 vLLM Qwen3-VL Embedding 服务；图文使用一次原生联合编码。视觉客户端使用兼容 Chat Completions 的图像模型服务，发送 `chat_template_kwargs.enable_thinking=false` 关闭 Qwen 思考模式，三项能力共用 `CAPTION_BASE_URL` 与 `CAPTION_MODEL`。两个变量均为空时关闭视觉能力，仅填写其中一项会报配置错误。OCR 首版只提取全文，不提供坐标、版面结构或置信度。决策客户端使用可选的 `DECISION_BASE_URL` 与 `DECISION_MODEL`，同样两项需同时填写。
+Embedding 客户端面向支持 `messages` 多模态扩展的 vLLM Qwen3-VL Embedding 服务；图文使用一次原生联合编码。视觉客户端使用兼容 Chat Completions 的图像模型服务，发送 `chat_template_kwargs.enable_thinking=false` 关闭 Qwen 思考模式，分类和 Caption 等能力共用 `CAPTION_BASE_URL` 与 `CAPTION_MODEL`。两个变量均为空时关闭视觉能力，仅填写其中一项会报配置错误。独立 OCR 方法仍可提取全文，但首阶段资料流水线不自动调用。决策客户端使用可选的 `DECISION_BASE_URL` 与 `DECISION_MODEL`，同样两项需同时填写；默认图片路由优先使用决策模型，配置与回退见 [图片路由](docs/routing.md)。
 
 基址填写 API 根路径（通常以 `/v1` 结尾），客户端追加 `embeddings`、`chat/completions`、`systemone` 或 `models`。可选的 `EMBEDDING_API_KEY`、`CAPTION_API_KEY`、`DECISION_API_KEY` 通过 Bearer 认证发送；为空时不发送认证头。`EMBEDDING_TIMEOUT_SECONDS` 默认 60，`CAPTION_TIMEOUT_SECONDS` 默认 120，`DECISION_TIMEOUT_SECONDS` 默认 60，表示网络读写与连接池等待超时；连接超时固定为 5 秒，不自动重试。
 
