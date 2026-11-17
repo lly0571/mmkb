@@ -91,8 +91,8 @@ export function diffDraft(baseline: ResourceDetail, draft: EditDraft): DraftDiff
     }
   }
 
-  applyTextField(patch, labels, notes, baseline, 'caption', draft.caption, 'Caption（图像描述）', 'structured_image/visual_image')
-  applyTextField(patch, labels, notes, baseline, 'ocr_text', draft.ocrText, 'OCR 文字', 'visdoc')
+  applyTextField(patch, labels, notes, baseline, 'caption', draft.caption, 'Caption（图像描述）', 'structured_image/info_rich_image')
+  applyTextField(patch, labels, notes, baseline, 'ocr_text', draft.ocrText, 'OCR 文字', '')
 
   const canChooseWorkflow = hasImageOriginal(baseline) && !draft.userText.trim()
   if (canChooseWorkflow && draft.workflow.action !== 'keep') {
@@ -129,8 +129,10 @@ function applyTextField(
   if (intent.action === 'keep') return
   if (intent.action === 'regenerate') {
     patch[field] = null
-    labels.push(`${label}：清空并请求重新生成`)
-    notes.push(`清空后只有在 ${usedBy} 路线下才会自动生成；其他路线会保持为空。`)
+    labels.push(`${label}：${usedBy ? '清空并请求重新生成' : '清空'}`)
+    notes.push(usedBy
+      ? `清空后只有在 ${usedBy} 路线下才会自动生成；其他路线会保持为空。`
+      : '首阶段所有路线均不自动生成 OCR；清空后保持为空，可手动填写。')
     return
   }
   if (intent.value !== current) {

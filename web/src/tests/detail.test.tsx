@@ -107,7 +107,7 @@ describe('resource detail page', () => {
     expect(screen.getByText('一张金融图表的配文')).toBeTruthy()
     expect(screen.getAllByText('null（未生成）').length).toBeGreaterThan(0)
     const warnings = screen.getByRole('region', { name: '处理警告' })
-    expect(within(warnings).getByText('图像描述（Caption）：可选视觉服务未配置，本步骤已跳过')).toBeTruthy()
+    expect(within(warnings).getByText('图像描述（Caption）：可选模型服务未启用，本步骤已跳过')).toBeTruthy()
     expect(within(warnings).getByText('caption/unavailable')).toBeTruthy()
     expect(screen.getByText(/状态为已就绪的资料仍已进入检索索引/)).toBeTruthy()
   })
@@ -212,15 +212,15 @@ describe('resource detail page', () => {
     expect(router.calls.find((call) => call.method === 'PATCH')?.json).toEqual({ revision: 3, caption: '' })
   })
 
-  it('sends explicit null when the user asks to regenerate OCR text', async () => {
+  it('sends explicit null to clear OCR and explains that automatic OCR is deferred', async () => {
     const user = userEvent.setup()
     const router = resourceRouter()
     render(<ResourceDetailPage resourceId={ID} />)
     await openDetail()
     await user.click(screen.getByRole('button', { name: '编辑' }))
     const ocrGroup = screen.getByRole('radiogroup', { name: 'OCR 文字处理方式' })
-    await user.click(within(ocrGroup).getByRole('radio', { name: '清空并请求重新生成（提交 null）' }))
-    expect(screen.getByText(/只有在 visdoc 路线下才会自动生成/)).toBeTruthy()
+    await user.click(within(ocrGroup).getByRole('radio', { name: '清空（提交 null，首阶段不自动生成）' }))
+    expect(screen.getByText(/首阶段所有路线均不自动生成 OCR/)).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '提交编辑' }))
     await vi.waitFor(() => expect(router.patchCalls).toBe(1))
     const body = router.calls.find((call) => call.method === 'PATCH')?.json

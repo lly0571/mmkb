@@ -1,8 +1,8 @@
 // Hand-written contract types mirroring mmkb/api.py. Re-check against a running
 // instance's /openapi.json whenever the backend changes.
 
-export type Workflow = 'structured_image' | 'visual_image' | 'visdoc' | 'text_image' | 'text'
-export type ImageWorkflow = 'structured_image' | 'visual_image' | 'visdoc'
+export type Workflow = ImageWorkflow | 'text_image' | 'text'
+export type ImageWorkflow = 'structured_image' | 'info_rich_image' | 'visual_image' | 'visdoc'
 export type ResourceStatus = 'pending' | 'processing' | 'ready' | 'failed'
 export type InputKind = 'image' | 'text_image' | 'text'
 
@@ -144,7 +144,7 @@ export interface ErrorDetail {
   message: string
 }
 
-export const IMAGE_WORKFLOWS: ImageWorkflow[] = ['structured_image', 'visual_image', 'visdoc']
+export const IMAGE_WORKFLOWS: ImageWorkflow[] = ['visdoc', 'structured_image', 'info_rich_image', 'visual_image']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

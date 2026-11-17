@@ -43,7 +43,7 @@ describe('edit draft diffing', () => {
     const diff = diffDraft(resource, draftWith(resource, { caption: { action: 'regenerate' }, ocrText: { action: 'regenerate' } }))
     expect(diff.patch.caption).toBeNull()
     expect(diff.patch.ocr_text).toBeNull()
-    expect(diff.notes.join()).toContain('只有在 structured_image/visual_image 路线下才会自动生成')
+    expect(diff.notes.join()).toContain('只有在 structured_image/info_rich_image 路线下才会自动生成')
   })
 
   it('keeps manual edits to an already empty field and to a filled field both visible', () => {

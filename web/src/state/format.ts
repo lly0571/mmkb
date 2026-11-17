@@ -23,8 +23,9 @@ export const KIND_LABELS: Record<InputKind, string> = {
 
 export const WORKFLOW_LABELS: Record<Workflow, string> = {
   structured_image: '结构化图片（图表/表格）',
-  visual_image: '视觉图片',
-  visdoc: '图文文档（OCR）',
+  info_rich_image: '信息密集图片（关键文字描述 + 整图）',
+  visual_image: '视觉图片（仅整图编码）',
+  visdoc: '文档页（整图编码）',
   text_image: '图文（以配文为主）',
   text: '纯文本',
 }
@@ -33,15 +34,23 @@ export const WORKFLOW_AUTO_LABEL = '自动识别（等待处理模块判断）'
 
 export const WARNING_STAGE_LABELS: Record<string, string> = {
   classify: '自动分类',
+  decision: '决策模型分类',
   caption: '图像描述（Caption）',
   ocr: '文字识别（OCR）',
 }
 
 export const WARNING_CODE_LABELS: Record<string, string> = {
-  unavailable: '可选视觉服务未配置，本步骤已跳过',
-  invalid_response: '视觉服务返回了无效结果',
-  input_too_large: '生成的文字超出服务端长度上限',
-  timeout: '视觉服务响应超时',
+  unavailable: '可选模型服务未启用，本步骤已跳过',
+  invalid_response: '模型服务返回了无效结果',
+  input_too_large: '模型输入或生成内容超出服务限制，本次增强已跳过',
+  timeout: '模型服务响应超时',
+  connection_error: '无法连接模型服务',
+  http_error: '模型服务请求失败',
+  unsupported_model: '当前模型不支持该能力',
+  output_truncated: '模型输出被截断，已跳过本次增强',
+  low_confidence: '决策可信度不足，已尝试备用分类',
+  low_label_mass: '决策标签概率质量不足，已尝试备用分类',
+  argmax_not_label: '模型最可能的答案不在允许标签中，已尝试备用分类',
   connection: '无法连接视觉服务',
   rate_limited: '视觉服务限流',
   invalid_image: '图片无法被视觉服务解析',

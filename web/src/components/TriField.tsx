@@ -7,13 +7,14 @@ interface TriFieldProps {
   intent: TextIntent
   onChange: (intent: TextIntent) => void
   hint?: string
+  autoGenerate?: boolean
 }
 
 /**
  * Three explicit states so “keep”, “manual value (possibly empty)” and “regenerate” never collapse
  * into the same request: omit / string / explicit null.
  */
-export function TriField({ id, legend, baseline, intent, onChange, hint }: TriFieldProps) {
+export function TriField({ id, legend, baseline, intent, onChange, hint, autoGenerate = true }: TriFieldProps) {
   const select = (action: TextIntent['action']) => {
     if (action === 'keep') onChange({ action: 'keep' })
     else if (action === 'regenerate') onChange({ action: 'regenerate' })
@@ -26,7 +27,7 @@ export function TriField({ id, legend, baseline, intent, onChange, hint }: TriFi
       <p className="field-current">
         当前值：
         {baseline === null ? (
-          <em className="muted">null（未生成，等待自动处理）</em>
+          <em className="muted">{autoGenerate ? 'null（未生成，等待自动处理）' : 'null（未生成）'}</em>
         ) : baseline === '' ? (
           <em className="muted">空字符串（人工置空）</em>
         ) : (
@@ -59,7 +60,7 @@ export function TriField({ id, legend, baseline, intent, onChange, hint }: TriFi
             checked={intent.action === 'regenerate'}
             onChange={() => select('regenerate')}
           />
-          清空并请求重新生成（提交 null）
+          {autoGenerate ? '清空并请求重新生成（提交 null）' : '清空（提交 null，首阶段不自动生成）'}
         </label>
       </div>
       {intent.action === 'manual' ? (

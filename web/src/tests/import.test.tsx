@@ -99,15 +99,18 @@ describe('import page', () => {
     expect(router.createCall()!.formData!.has('workflow')).toBe(false)
   })
 
-  it('sends the chosen workflow for an image-only resource', async () => {
+  it.each([
+    ['文档页（整图编码）', 'visdoc'],
+    ['信息密集图片（关键文字描述 + 整图）', 'info_rich_image'],
+  ])('sends the chosen image-only workflow %s', async (label, workflow) => {
     const user = userEvent.setup()
     const router = importRouter()
     render(<ImportPage />)
     await user.upload(screen.getByLabelText(IMAGE_INPUT), pngFile())
-    await user.click(screen.getByRole('radio', { name: '图文文档（OCR）' }))
+    await user.click(screen.getByRole('radio', { name: label }))
     await user.click(screen.getByRole('button', SUBMIT))
     await vi.waitFor(() => expect(router.createCall()).toBeDefined())
-    expect(router.createCall()!.formData!.get('workflow')).toBe('visdoc')
+    expect(router.createCall()!.formData!.get('workflow')).toBe(workflow)
   })
 
   it('keeps the draft and the preview on a validation failure', async () => {

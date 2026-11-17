@@ -2,8 +2,8 @@ import { useState } from 'react'
 
 import { deleteResource, patchResource, retryResource } from '../api/resources'
 import { toApiError, type ApiError } from '../api/http'
-import type { ImageWorkflow, ResourceDetail } from '../api/types'
-import { readWarnings } from '../api/types'
+import type { ResourceDetail } from '../api/types'
+import { IMAGE_WORKFLOWS, readWarnings } from '../api/types'
 import { LIBRARY_ROUTE, RESOURCE_ID_PATTERN, navigate, resourceRoute } from '../app/router'
 import { ErrorNote, InfoNote } from '../components/ErrorNote'
 import { OriginalPane } from '../components/OriginalPane'
@@ -469,7 +469,7 @@ function EditForm({
             <input type="radio" name="edit-workflow" checked={draft.workflow.action === 'auto'} onChange={() => onChange({ ...draft, workflow: { action: 'auto' } })} />
             重新自动分类（提交 workflow: null）
           </label>
-          {(['structured_image', 'visual_image', 'visdoc'] as ImageWorkflow[]).map((choice) => (
+          {IMAGE_WORKFLOWS.map((choice) => (
             <label key={choice}>
               <input
                 type="radio"
@@ -494,6 +494,7 @@ function EditForm({
       <TriField
         id="edit-ocr"
         legend="OCR 文字"
+        autoGenerate={false}
         baseline={baseline.ocr_text}
         intent={draft.ocrText}
         onChange={(ocrText) => onChange({ ...draft, ocrText })}

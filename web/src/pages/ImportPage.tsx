@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createResource } from '../api/resources'
 import { toApiError } from '../api/http'
 import type { CreatedResource, ImageWorkflow } from '../api/types'
+import { IMAGE_WORKFLOWS } from '../api/types'
 import { ErrorNote, InfoNote } from '../components/ErrorNote'
 import { ImagePicker } from '../components/ImagePicker'
 import { StatusBadge } from '../components/StatusBadge'
@@ -19,7 +20,7 @@ import {
 import { useResourceStatus } from '../state/useResourceStatus'
 import { BatchImportPanel } from './BatchImportPanel'
 
-const WORKFLOW_CHOICES: ImageWorkflow[] = ['structured_image', 'visual_image', 'visdoc']
+const WORKFLOW_CHOICES = IMAGE_WORKFLOWS
 
 export function ImportPage() {
   const [file, setFile] = useState<File | null>(null)
