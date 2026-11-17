@@ -1,8 +1,8 @@
 # 资源管理
 
-已实现三类资料导入、分页查询、详情、编辑、失败重试、原件代理读取及删除清理。HTTP 层使用 FastAPI，业务层直接使用 SQLAlchemy ORM。结构沿用现有三张表，无新增迁移。
+已实现三类资料导入、分页查询、详情、编辑、失败重试、原件代理读取及删除清理。HTTP 层使用 FastAPI，业务层直接使用 SQLAlchemy ORM。[目录与批量导入](imports.md) 复用此创建链路，并通过 `0002_import_items` 增加持久回执表。
 
-本模块只将资料置为 `pending`，不调用编码或检索服务。独立运行的 [处理 Worker](processing.md) 负责推进到 `ready` 或 `failed`；未启动 Worker 时资料保持 `pending`。当前不提供 Web、缩略图、替换原图或删除恢复。
+本模块只将资料置为 `pending`，不调用编码或检索服务。独立运行的 [处理 Worker](processing.md) 负责推进到 `ready` 或 `failed`；未启动 Worker 时资料保持 `pending`。[Web](web.md) 已提供单份及批量入口；缩略图、替换原图和删除恢复尚未提供。
 
 ## 配置与启动
 

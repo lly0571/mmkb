@@ -11,6 +11,7 @@
 | `resources` | 图片、图文和文本资料的元数据、文件位置与处理状态 |
 | `resource_indexes` | 每份资料的 2048 维半精度向量和辅助文本检索字段 |
 | `storage_profiles` | 本地目录或 S3 兼容存储的公共配置 |
+| `import_items` | 逐项导入的持久回执、提交幂等与中断恢复定位 |
 
 详细字段和迁移约定见 [Schema 说明](docs/schema.md)，模型定义见 [models.py](mmkb/db/models.py)。
 
@@ -36,6 +37,8 @@ uvicorn mmkb.api:create_app --factory --host 127.0.0.1 --port 8010
 ```
 
 接口、编辑规则、删除清理命令和集成测试见 [资源管理说明](docs/resources.md)。
+
+目录 CLI 与 Web 批量入口支持默认不递归、内容去重、预览清单和断点续传，使用方式见 [目录与批量导入](docs/imports.md)。
 
 ## 后台处理
 

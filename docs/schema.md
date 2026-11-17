@@ -45,6 +45,12 @@ erDiagram
 
 `search_tsv` 使用 PostgreSQL `simple` 配置。向量编码模型由部署环境指定；查询与资料必须遵守相同编码约定。改变模型或关键预处理需要重建已有向量，改变维度还需要结构迁移。
 
+## `import_items`
+
+`0002_import_items` 新增逐项导入回执。主键 `key` 是客户端提交 UUID；`request_hash` 绑定规范化内容与参数，`sha256` 保存原件摘要。`planned_resource_id/storage_profile/object_key` 在写原件前持久保存，`resource_id/state/outcome/duplicate/error` 记录结果，`created_at/updated_at` 记录时间。
+
+该表保留资源删除后的幂等记录，因此不对资源建立级联删除外键；存储快照只包含公共位置及凭证引用，不包含密钥。`reserved/completed/failed` 是上传阶段状态，与资源表的模型处理状态分开。详见 [批量导入协议与恢复边界](imports.md)。
+
 ## `storage_profiles`
 
 | 字段 | 类型 | 用途 |

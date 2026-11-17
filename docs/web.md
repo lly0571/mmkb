@@ -9,7 +9,7 @@
 | 路由 | 作用 | 使用的接口 |
 | --- | --- | --- |
 | `#/library` | 浏览分页 + 三类检索、标签 AND、Top-K、状态/输入类型筛选 | `GET /api/resources`、`POST /api/search` |
-| `#/import` | 单份导入、本地预览与粘贴图片、仅图片路线选择、创建后状态轮询 | `POST /api/resources`、`GET /api/resources/{id}` |
+| `#/import` | 单份导入、批量多选及目录上传、预览、清单恢复与状态轮询 | `POST /api/resources`、`GET /api/resources/{id}`、`GET /api/imports/options`、`POST /api/imports/resolve` |
 | `#/resources/<id>` | 原件与内容两栏、警告与错误、编辑、失败重试、删除 | `GET`、`PATCH`、`POST /retry`、`DELETE`、`GET /original` |
 | `#/connections` | 依赖状态说明（T05 未交付，页面无探测） | 无 |
 
@@ -26,6 +26,8 @@
 - 隐藏页面、切换资料和卸载会取消旧详情请求；额外的请求标识会隔离忽略取消的晚到响应。缓存拒绝低 revision、同版本的旧时间戳和终态回退。编辑/重试成功会重新启动对应版本的轮询。
 
 图片选择区使用原生按钮，隐藏 file input 不嵌套在按钮内部；支持键盘选择、拖放及聚焦后粘贴，窄屏允许提示换行。文件格式和大小的最终校验仍由后端负责。
+
+批量入口默认不递归、跳过相同内容、两个并发上传；支持预览、暂停、仅重试失败项和结果导出。刷新后从 IndexedDB 恢复清单，重选文件并核验 SHA-256 后续传。批量状态每轮按最多 100 个提交标识查询，模型处理按资源 ID 去重统计；详见 [目录与批量导入](imports.md)。
 
 ## 编辑规则
 
