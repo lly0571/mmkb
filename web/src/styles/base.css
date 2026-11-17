@@ -742,6 +742,164 @@ textarea {
   }
 }
 
+/* Connection status page: state is also carried by data-state and text, never colour alone. */
+.health-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.health-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.health-summary[data-status='healthy'] {
+  border-left-color: #4b9c6d;
+}
+
+.health-summary[data-status='degraded'] {
+  border-left-color: #e0a13c;
+}
+
+.health-summary[data-status='unavailable'] {
+  border-left-color: #cc5b52;
+}
+
+.health-summary[data-status='unknown'] {
+  border-left-color: #8d94a3;
+}
+
+.health-heading {
+  margin: 14px 0 0;
+  font-size: 1rem;
+}
+
+.health-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.health-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.health-item[data-state='down'] {
+  border-color: #f0b3ae;
+}
+
+.health-item[data-state='unknown'] {
+  border-color: #cfd4de;
+  background: #fbfcfe;
+}
+
+.health-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.health-required {
+  font-size: 0.78rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+.health-message {
+  margin: 6px 0 0;
+}
+
+.health-meta {
+  margin: 2px 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.health-code code {
+  overflow-wrap: anywhere;
+}
+
+.health-boundary,
+.health-advice {
+  margin: 6px 0 0;
+  font-size: 0.86rem;
+}
+
+.health-advice {
+  color: var(--warn);
+}
+
+.badge.health-badge-connected {
+  background: #eaf7ef;
+  border-color: #a8d8bb;
+  color: var(--ok);
+}
+
+.badge.health-badge-down {
+  background: #fdeceb;
+  border-color: #f0b3ae;
+  color: var(--danger);
+}
+
+.badge.health-badge-not_configured,
+.badge.health-badge-disabled {
+  background: #f2f4f8;
+  border-color: #cfd4de;
+  color: var(--muted);
+}
+
+.badge.health-badge-unknown {
+  background: #fff6e5;
+  border-color: #f0cd8a;
+  color: var(--warn);
+}
+
+.badge.health-badge-healthy {
+  background: #eaf7ef;
+  border-color: #a8d8bb;
+  color: var(--ok);
+}
+
+.badge.health-badge-degraded {
+  background: #fff6e5;
+  border-color: #f0cd8a;
+  color: var(--warn);
+}
+
+.badge.health-badge-unavailable {
+  background: #fdeceb;
+  border-color: #f0b3ae;
+  color: var(--danger);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .batch-table-wrap {
   overflow-x: auto;
   margin-top: 14px;

@@ -99,6 +99,46 @@ export interface ResourcePatchInput {
   workflow?: ImageWorkflow | null
 }
 
+// ---- Connection status (GET /api/health). Mirrors mmkb/health_contract.py exactly. ----
+export type HealthStatus = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
+export type HealthState = 'connected' | 'down' | 'not_configured' | 'disabled' | 'unknown'
+export type HealthCheckKey = 'api' | 'database' | 'embedding' | 'storage' | 'vision' | 'decision' | 'worker'
+export type HealthBackend = 'local' | 's3'
+
+export interface HealthCheck {
+  state: HealthState
+  required: boolean
+  code: string
+  message: string
+  latency_ms: number | null
+  scope: string
+  backend?: HealthBackend
+}
+
+export interface HealthReport {
+  schema_version: number
+  status: HealthStatus
+  checked_at: string
+  duration_ms: number
+  cached: boolean
+  age_ms: number
+  ttl_ms: number
+  checks: Record<HealthCheckKey, HealthCheck>
+}
+
+export const HEALTH_SCHEMA_VERSION = 1
+export const HEALTH_STATUSES: HealthStatus[] = ['healthy', 'degraded', 'unavailable', 'unknown']
+export const HEALTH_STATES: HealthState[] = ['connected', 'down', 'not_configured', 'disabled', 'unknown']
+export const HEALTH_CHECK_KEYS: HealthCheckKey[] = [
+  'api',
+  'database',
+  'embedding',
+  'storage',
+  'vision',
+  'decision',
+  'worker',
+]
+
 export interface ErrorDetail {
   field: string
   message: string

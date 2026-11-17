@@ -43,7 +43,7 @@ export function App() {
             导入
           </a>
           <a href={CONNECTIONS_ROUTE} aria-current={active === 'connections' ? 'page' : undefined}>
-            连接状态 <span className="tag-todo">待接入</span>
+            连接状态
           </a>
         </nav>
         <p className="app-note">单用户本地部署；前端只调用同源 <code>/api</code>，不接触数据库、对象存储与模型凭证。</p>

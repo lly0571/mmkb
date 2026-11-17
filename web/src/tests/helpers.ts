@@ -1,6 +1,15 @@
 import { vi } from 'vitest'
 
-import type { CreatedResource, ResourceDetail, ResourceList, SearchItem, SearchResponse } from '../api/types'
+import type {
+  CreatedResource,
+  HealthCheck,
+  HealthCheckKey,
+  ResourceDetail,
+  ResourceList,
+  SearchItem,
+  SearchResponse,
+} from '../api/types'
+import { HEALTH_CHECK_KEYS } from '../api/types'
 
 export interface RecordedCall {
   url: string
@@ -11,6 +20,8 @@ export interface RecordedCall {
   body: BodyInit | null
   formData: FormData | null
   json: Record<string, unknown> | null
+  /** Recorded so cancellation tests can prove the request was actually aborted. */
+  signal: AbortSignal | null
 }
 
 export type FetchHandler = (call: RecordedCall) => Response | Promise<Response>
@@ -64,6 +75,7 @@ export function installFetch(handler: FetchHandler, options: FetchOptions = {}):
       body,
       formData: body instanceof FormData ? body : null,
       json,
+      signal: (init?.signal as AbortSignal | null) ?? null,
     }
     calls.push(call)
     const result = Promise.resolve().then(() => handler(call))
@@ -163,4 +175,78 @@ export function pngFile(name = 'chart.png', bytes = 12): File {
 
 export function callsTo(calls: RecordedCall[], method: string, pathFragment: string): RecordedCall[] {
   return calls.filter((call) => call.method === method && call.path.includes(pathFragment))
+}
+
+export function makeHealthCheck(overrides: Partial<HealthCheck> = {}): HealthCheck {
+  return {
+    state: 'connected',
+    required: true,
+    code: 'database_ready',
+    message: '连接与预期结构检查通过',
+    latency_ms: 30,
+    scope: 'connection_and_schema',
+    ...overrides,
+  }
+}
+
+const HEALTH_DEFAULTS: Record<HealthCheckKey, Partial<HealthCheck>> = {
+  api: { code: 'api_reachable', message: 'API 已响应', latency_ms: null, scope: 'http_response' },
+  database: { code: 'database_ready', message: '连接与预期结构检查通过', scope: 'connection_and_schema' },
+  embedding: {
+    code: 'model_list_verified',
+    message: '配置模型已在服务列表中发现，未执行推理',
+    latency_ms: 180,
+    scope: 'model_list',
+  },
+  storage: {
+    code: 'bucket_accessible',
+    message: '当前 S3 Bucket 检查通过，未验证对象读写',
+    latency_ms: 90,
+    scope: 'bucket_head',
+    backend: 's3',
+  },
+  vision: {
+    required: false,
+    state: 'not_configured',
+    code: 'optional_not_configured',
+    message: '未配置该可选服务',
+    latency_ms: null,
+    scope: 'configuration',
+  },
+  decision: {
+    required: false,
+    code: 'service_disabled',
+    message: '该项已显式禁用',
+    latency_ms: null,
+    scope: 'configuration',
+  },
+  worker: {
+    required: false,
+    state: 'unknown',
+    code: 'heartbeat_not_implemented',
+    message: '尚无 Worker 心跳，无法判断是否运行',
+    latency_ms: null,
+    scope: 'not_monitored',
+  },
+}
+
+export function makeHealthReport(overrides: Record<string, Partial<HealthCheck> | unknown> = {}): Record<string, unknown> {
+  const checkOverrides = (overrides['checks'] ?? {}) as Record<string, Partial<HealthCheck>>
+  const checks = {} as Record<HealthCheckKey, HealthCheck>
+  for (const key of HEALTH_CHECK_KEYS) {
+    checks[key] = makeHealthCheck({ ...(HEALTH_DEFAULTS[key] as HealthCheck), ...checkOverrides[key] })
+  }
+  return {
+    schema_version: 1,
+    status: 'healthy',
+    checked_at: '2026-11-17T08:00:00Z',
+    duration_ms: 220,
+    cached: false,
+    age_ms: 0,
+    ttl_ms: 10_000,
+    checks,
+    ...overrides,
+    // `checks` must stay merged rather than replaced by the raw override object.
+    ...(checkOverrides ? { checks } : {}),
+  }
 }

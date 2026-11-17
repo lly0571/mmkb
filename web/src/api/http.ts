@@ -90,6 +90,8 @@ const CODE_HINTS: Record<string, string> = {
   embedding_invalid_response: 'Embedding 服务返回无效结果',
   embedding_connection: '无法连接 Embedding 服务',
   validation_error: '请求字段校验失败',
+  health_timeout: '等待健康检查超时，后端可能仍在探测依赖，请稍后重新检查',
+  health_invalid_response: '健康检查响应不符合契约，请检查代理是否改写了 /api/health',
   http_error: '请求失败',
   worker_lock_lost: '处理 Worker 已失去所有权，需要运维介入恢复',
   aborted: '请求已取消',
