@@ -70,9 +70,19 @@ python -m mmkb.worker recover-processing
 
 文件存储已提供同步 Local/S3 适配器、读写删除接口和显式 profile 初始化入口。先应用迁移并配置存储，再运行 `python -m mmkb.storage init`；配置、调用方式和隔离集成测试见 [文件存储说明](docs/storage.md)。存储配置独立加载，不要求模型服务配置存在。
 
+## 连接状态
+
+`GET /api/health` 只读返回一份依赖快照，供 Web「连接状态」页和运维核对：`api`、`database`、`embedding`、`storage`、`vision`、`decision`、`worker` 各给状态、错误码、检查范围与建议动作，汇总为 `healthy`、`degraded`、`unavailable`、`unknown`。
+
+```bash
+curl -s http://127.0.0.1:8010/api/health
+```
+
+检查全程不写入、不迁移、不初始化 profile、不创建目录：模型只核对 `/models` 列表、不发起推理，存储只覆盖 `STORAGE_PROFILE_NAME` 指定的当前 profile。Worker 尚无心跳，固定返回“未监测”。探测在独立子进程内按 5 秒总预算执行，超期或崩溃只会得到 `unknown`，报告 10 秒内复用并标注为缓存结果；响应不含地址、模型 ID、凭证、Bucket 与路径，依赖全红也返回 `200` 与 `Cache-Control: no-store`。字段、错误码与预算见 [连接状态 API](docs/health.md)。
+
 ## Web 界面
 
-`web/` 是 React + TypeScript + Vite 的单页应用，覆盖资料库与检索、导入、详情编辑与删除三块核心流程，只调用同源 `/api` 接口，不接触数据库、对象存储与模型凭证。浏览与搜索参数互不混用，状态由服务端轮询驱动，编辑区分“保留 / 人工字符串 / 显式 null”三种意图，失败重试只对 `failed` 开放。连接状态页与缩略图分别依赖 T05、T06，未交付时明确标为待接入。
+`web/` 是 React + TypeScript + Vite 的单页应用，覆盖资料库与检索、导入、详情编辑与删除三块核心流程，只调用同源 `/api` 接口，不接触数据库、对象存储与模型凭证。浏览与搜索参数互不混用，状态由服务端轮询驱动，编辑区分“保留 / 人工字符串 / 显式 null”三种意图，失败重试只对 `failed` 开放。连接状态页读取 `/api/health`，逐项展示检查结果与未证明内容；缩略图依赖 T06，未交付时明确标为待接入。
 
 ```bash
 cd web && npm ci && cp .env.example .env.local && npm run dev   # 代理目标由 .env.local 指定
