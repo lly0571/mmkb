@@ -1,4 +1,4 @@
-"""Minimal MMKB schema: one resource, one retrieval row, one storage profile."""
+"""MMKB resources, retrieval rows, storage profiles and durable import receipts."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,6 +15,27 @@ from mmkb.config import EMBEDDING_DIMENSIONS
 
 class Base(DeclarativeBase):
     metadata = sa.MetaData(schema="mmkb")
+
+
+class ImportItem(Base):
+    """A durable reservation; intentionally survives physical resource deletion."""
+    __tablename__ = "import_items"
+    __table_args__ = {"comment": "逐项导入回执和原件定位；资源删除后保留幂等记录"}
+
+    key: Mapped[UUID] = mapped_column(primary_key=True)
+    request_hash: Mapped[str] = mapped_column(sa.Text)
+    sha256: Mapped[str | None] = mapped_column(sa.Text)
+    planned_resource_id: Mapped[UUID] = mapped_column()
+    # No resource FK: deleting a resource must never allow its request to be replayed as new.
+    resource_id: Mapped[UUID | None] = mapped_column()
+    storage_profile: Mapped[dict[str, Any] | None] = mapped_column(pg.JSONB)
+    object_key: Mapped[str | None] = mapped_column(sa.Text)
+    state: Mapped[str] = mapped_column(sa.Text, server_default="reserved")
+    outcome: Mapped[str | None] = mapped_column(sa.Text)
+    duplicate: Mapped[bool] = mapped_column(server_default=sa.false())
+    error: Mapped[str | None] = mapped_column(sa.Text)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now())
 
 
 class StorageProfile(Base):

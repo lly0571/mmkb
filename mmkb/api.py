@@ -5,7 +5,7 @@ import logging
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import FastAPI, File, Form, Query, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, Response, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException
 from mmkb.config import AppConfig, load_app_config
 from mmkb.db.session import create_session_factory
 from mmkb.errors import ResourceError
+from mmkb.imports import ImportService
 from mmkb.resources import ResourceService
 from mmkb.search import SearchService
 from mmkb.storage import StorageResolver
@@ -46,6 +47,37 @@ class ResourceDetail(BaseModel):
 
 class CreatedResource(ResourceDetail):
     duplicate: bool
+    import_outcome: Literal["created", "skipped"] | None = None
+    replayed: bool | None = None
+
+
+class ImportOptions(BaseModel):
+    schema_version: Literal[1]
+    formats: list[str]
+    image_workflows: list[str]
+    max_upload_bytes: int
+    max_text_chars: int
+
+
+class ImportResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    keys: list[UUID] = Field(min_length=1, max_length=100)
+
+
+class ImportReceipt(BaseModel):
+    key: UUID
+    state: Literal["missing", "reserved", "completed", "failed"]
+    resource_id: UUID | None
+    outcome: Literal["created", "skipped"] | None
+    duplicate: bool
+    error: str | None
+    resource_status: Literal["pending", "processing", "ready", "failed", "deleted"] | None
+    resource_workflow: Workflow | None
+    resource_error: str | None
+
+
+class ImportResolution(BaseModel):
+    items: list[ImportReceipt]
 
 
 class ResourceList(BaseModel):
@@ -99,6 +131,11 @@ class OriginalResponse(StreamingResponse):
             self.stream.close()
 
 
+async def _no_store(response: Response) -> None:
+    """Prevent browsers and proxies from replaying a stale API snapshot."""
+    response.headers["Cache-Control"] = "no-store"
+
+
 def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=None, search_service=None) -> FastAPI:
     config = config or load_app_config()
     owned_sessions = sessions is None
@@ -126,7 +163,9 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
 
     app = FastAPI(title="MMKB Resource API", version="0.1.0", lifespan=lifespan)
     service = ResourceService(sessions, config, resolver)
+    imports = ImportService(service)
     app.state.resources = service
+    app.state.imports = imports
     app.state.search = search_service
 
     @app.exception_handler(ResourceError)
@@ -152,17 +191,38 @@ def create_app(config: AppConfig | None = None, sessions=None, storage_resolver=
             "code": "database_unavailable", "message": "Database unavailable; check connection and migrations",
         })
 
-    @app.post("/api/resources", status_code=201, response_model=CreatedResource)
+    @app.get("/api/imports/options", response_model=ImportOptions, dependencies=[Depends(_no_store)])
+    def import_options():
+        return imports.options()
+
+    @app.post("/api/imports/resolve", response_model=ImportResolution, dependencies=[Depends(_no_store)])
+    def resolve_imports(body: ImportResolveRequest):
+        return imports.resolve(body.keys)
+
+    @app.post("/api/resources", status_code=201, response_model=CreatedResource, response_model_exclude_unset=True)
     def create_resource(
+        response: Response,
         file: Annotated[UploadFile | None, File()] = None,
         title: Annotated[str, Form()] = "",
         tags: Annotated[list[str] | None, Form()] = None,
         user_text: Annotated[str | None, Form()] = None,
         workflow: Annotated[Workflow | None, Form()] = None,
+        idempotency_key: Annotated[UUID | None, Header()] = None,
+        duplicate_policy: Annotated[Literal["skip", "create"], Form()] = "create",
+        expected_sha256: Annotated[str | None, Form(pattern="^[0-9a-f]{64}$")] = None,
     ):
         try:
-            return service.create(source=file.file if file else None, filename=file.filename if file else None,
-                                  title=title, tags=tags, user_text=user_text, workflow=workflow)
+            fields = dict(source=file.file if file else None, filename=file.filename if file else None,
+                          title=title, tags=tags, user_text=user_text, workflow=workflow)
+            if idempotency_key is None:
+                if duplicate_policy != "create" or expected_sha256 is not None:
+                    raise ResourceError("import_key_required", "Use Idempotency-Key with import options")
+                return service.create(**fields)
+            result = imports.create(idempotency_key, duplicate_policy=duplicate_policy,
+                                    expected_sha256=expected_sha256, **fields)
+            if result["replayed"] or result["import_outcome"] == "skipped":
+                response.status_code = 200
+            return result
         finally:
             if file:
                 file.file.close()

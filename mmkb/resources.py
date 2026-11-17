@@ -100,51 +100,84 @@ class ResourceService:
     def create(self, *, source: BinaryIO | None = None, filename: str | None = None,
                title: str = "", tags: list[str] | None = None, user_text: str | None = None,
                workflow: str | None = None) -> dict:
+        values, extension = self.prepare(source=source, filename=filename, title=title,
+                                         tags=tags, user_text=user_text, workflow=workflow)
+        resource_id = uuid4()
+        profile, key = self.plan_storage(resource_id, extension)
+        storage = self.storage_resolver(profile) if profile else None
+        try:
+            with self.sessions.begin() as session:
+                self.lock_content(session, values["sha256"])
+                result = self.insert(session, resource_id, values, source, storage, profile, key)
+            logger.info("Resource created resource_id=%s revision=1", resource_id)
+            return result
+        except Exception:
+            # COMMIT can succeed even when its acknowledgement is lost. Reacquire the same
+            # content lock and prove absence using a fresh connection before deleting bytes.
+            if storage:
+                try:
+                    with self.sessions() as session, session.begin():
+                        self.lock_content(session, values["sha256"])
+                        if session.get(Resource, resource_id) is None:
+                            storage.delete(key)
+                except Exception as cleanup_error:
+                    logger.error("Import compensation deferred resource_id=%s error_type=%s",
+                                 resource_id, type(cleanup_error).__name__)
+            raise
+
+    def prepare(self, *, source=None, filename=None, title="", tags=None, user_text=None,
+                workflow=None):
+        """Validate once, preserving the exact stream later written to storage."""
         self._validate_texts(dict(title=title, user_text=user_text))
         tags = normalize_tags(tags or [])
         user_text = user_text if user_text and user_text.strip() else None
         kind, workflow = input_route(source is not None, user_text, workflow)
-        resource_id = uuid4()
-        storage = None
-        key = None
-        profile_id = None
         sha256 = None
+        extension = None
         extra = {}
         if source is not None:
             sha256, extension, extra = self._inspect_image(source, filename)
-            with self.sessions() as session:
-                profile = session.scalar(sa.select(StorageProfile).where(
-                    StorageProfile.name == self.config.storage_profile_name))
-                if profile is None:
-                    raise StorageError("Storage profile not initialized; run python -m mmkb.storage init")
-                profile_id = profile.id
-                prefix = self.config.s3_prefix.rstrip("/") if profile.backend == "s3" else ""
-            key = validate_key(f"{prefix + '/' if prefix else ''}{resource_id}/original.{extension}")
-            storage = self.storage_resolver(profile)
-        resource = Resource(
-            id=resource_id, input_kind=kind, workflow=workflow, title=title, tags=tags,
-            user_text=user_text, extra=extra, storage_profile_id=profile_id, object_key=key,
-            sha256=sha256, status="pending", revision=1,
-        )
-        try:
-            if storage:
-                storage.put(key, source, extra["mime_type"])
-            with self.sessions.begin() as session:
-                duplicate = bool(sha256 and session.scalar(sa.select(Resource.id).where(
-                    Resource.sha256 == sha256, Resource.deleted_at.is_(None)).limit(1)))
-                session.add(resource)
-                session.flush()
-                result = resource_view(resource)
-                result["duplicate"] = duplicate
-            logger.info("Resource created resource_id=%s revision=1", resource_id)
-            return result
-        except Exception:
-            if storage:
-                try:
-                    storage.delete(key)
-                except Exception as cleanup_error:
-                    logger.error("Import compensation failed resource_id=%s error_type=%s", resource_id, type(cleanup_error).__name__)
-            raise
+        return dict(input_kind=kind, workflow=workflow, title=title, tags=tags,
+                    user_text=user_text, extra=extra, sha256=sha256), extension
+
+    @staticmethod
+    def lock_content(session, sha256):
+        if sha256:
+            # The one-bigint space does not overlap the Worker's two-int lock space.
+            lock_key = int.from_bytes(bytes.fromhex(sha256)[:8], "big", signed=True)
+            acquired = session.scalar(sa.text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": lock_key})
+            if not acquired:
+                raise ResourceError("import_busy", "Content is being imported; resolve and retry", 409)
+
+    @staticmethod
+    def duplicate_resource(session, sha256):
+        if not sha256:
+            return None
+        return session.scalar(sa.select(Resource).where(
+            Resource.sha256 == sha256, Resource.deleted_at.is_(None),
+        ).order_by(Resource.created_at, Resource.id).limit(1))
+
+    def plan_storage(self, resource_id, extension):
+        if extension is None:
+            return None, None
+        with self.sessions() as session:
+            profile = session.scalar(sa.select(StorageProfile).where(
+                StorageProfile.name == self.config.storage_profile_name))
+            if profile is None:
+                raise StorageError("Storage profile not initialized; run python -m mmkb.storage init")
+            prefix = self.config.s3_prefix.rstrip("/") if profile.backend == "s3" else ""
+        return profile, validate_key(f"{prefix + '/' if prefix else ''}{resource_id}/original.{extension}")
+
+    def insert(self, session, resource_id, values, source, storage, profile, key):
+        duplicate = self.duplicate_resource(session, values["sha256"]) is not None
+        if storage:
+            source.seek(0)
+            storage.put(key, source, values["extra"]["mime_type"])
+        resource = Resource(id=resource_id, **values, storage_profile_id=profile.id if profile else None,
+                            object_key=key, status="pending", revision=1)
+        session.add(resource)
+        session.flush()
+        return dict(resource_view(resource), duplicate=duplicate)
 
     def get(self, resource_id: UUID) -> dict:
         with self.sessions() as session:
